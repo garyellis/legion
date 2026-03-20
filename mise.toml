@@ -1,0 +1,19 @@
+[tools]
+python = "3.13"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.install]
+description = "Install dependencies"
+run = "uv sync"
+
+[tasks.test]
+description = "Run pytest"
+depends = ["install"]
+run = "uv run pytest tests/ -v"
+
+[tasks."test:watch"]
+description = "Run pytest on file changes"
+depends = ["install"]
+run = "uv run pytest tests/ -v --tb=short"
