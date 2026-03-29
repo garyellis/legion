@@ -12,10 +12,17 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import os
+import urllib.error
+import urllib.request
 from typing import Any
 
+import typer
+
 from legion.slack.registry import registry
+
+logger = logging.getLogger(__name__)
 
 # ── OAuth scopes required by this app ──────────────────────────────────────
 
@@ -127,8 +134,53 @@ def build_manifest() -> dict[str, Any]:
     }
 
 
+def update_manifest(app_id: str, config_token: str) -> dict[str, Any]:
+    """Push the current manifest to Slack via apps.manifest.update.
+
+    Requires a **configuration token** (not bot token).
+    Generate one at https://api.slack.com/apps/<app_id>/general → App Configuration Tokens.
+    """
+    manifest = build_manifest()
+    payload = json.dumps({"app_id": app_id, "manifest": manifest}).encode()
+    req = urllib.request.Request(
+        "https://slack.com/api/apps.manifest.update",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {config_token}",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read())
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Manifest update request failed: {exc}") from exc
+
+    if not result.get("ok"):
+        raise RuntimeError(f"Slack API error: {result.get('error', result)}")
+
+    logger.info("Manifest updated for app %s", app_id)
+    return result
+
+
+def _cli(
+    update: bool = typer.Option(False, help="Push manifest to Slack API"),
+) -> None:
+    """Slack app manifest tool."""
+    if update:
+        app_id = os.environ.get("SLACK_APP_ID", "")
+        config_token = os.environ.get("SLACK_CONFIG_TOKEN", "")
+        if not app_id or not config_token:
+            typer.echo("Error: set SLACK_APP_ID and SLACK_CONFIG_TOKEN env vars", err=True)
+            raise typer.Exit(1)
+        result = update_manifest(app_id, config_token)
+        typer.echo(json.dumps(result, indent=2))
+    else:
+        typer.echo(json.dumps(build_manifest(), indent=2))
+
+
 def main() -> None:
-    print(json.dumps(build_manifest(), indent=2))
+    typer.run(_cli)
 
 
 if __name__ == "__main__":
