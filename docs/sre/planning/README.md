@@ -45,6 +45,7 @@ Legion is an SRE and Platform Engineering toolkit built on first principles:
 | [Agent Runtime](./agent-runtime.md) | Agent process, AI runtime, knowledge layer, tools, guardrails |
 | [Security and Operations](./security-and-operations.md) | Secrets, credentials, auth, audit log, messaging reliability, deployment, observability |
 | [Threat Model](./threat-model.md) | STRIDE analysis, attack surfaces, LLM threats, plugin security, mitigations |
+| [Risks and Follow-Ups](./risks-and-followups.md) | Tracked risks, open questions, items to resolve before/during each sprint |
 
 ### How to Use These Docs
 
