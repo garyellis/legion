@@ -13,3 +13,6 @@ env.sh
 gadget_tcprtt_summary.py
 legion.db
 references/**
+
+# Archived drafts
+__archived__/
