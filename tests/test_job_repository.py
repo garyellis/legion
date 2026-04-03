@@ -1,19 +1,14 @@
-"""Tests for JobRepository contract (InMemory + SQLite)."""
+"""Tests for JobRepository contract (SQLite)."""
 
 import pytest
 
 from legion.domain.job import Job, JobType
 from legion.plumbing.database import create_all, create_engine
-from legion.services.job_repository import (
-    InMemoryJobRepository,
-    SQLiteJobRepository,
-)
+from legion.services.job_repository import SQLiteJobRepository
 
 
-@pytest.fixture(params=["memory", "sqlite"])
-def repo(request):
-    if request.param == "memory":
-        return InMemoryJobRepository()
+@pytest.fixture()
+def repo():
     engine = create_engine("sqlite:///:memory:")
     create_all(engine)
     return SQLiteJobRepository(engine)

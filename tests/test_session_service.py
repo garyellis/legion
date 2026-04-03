@@ -3,20 +3,28 @@
 import pytest
 
 from legion.domain.session import SessionStatus
+from legion.plumbing.database import create_all, create_engine
 from legion.services.exceptions import SessionError
-from legion.services.fleet_repository import InMemoryFleetRepository
-from legion.services.session_repository import InMemorySessionRepository
+from legion.services.fleet_repository import SQLiteFleetRepository
+from legion.services.session_repository import SQLiteSessionRepository
 from legion.services.session_service import SessionService
 
 
 @pytest.fixture()
-def session_repo():
-    return InMemorySessionRepository()
+def _engine():
+    engine = create_engine("sqlite:///:memory:")
+    create_all(engine)
+    return engine
 
 
 @pytest.fixture()
-def fleet_repo():
-    return InMemoryFleetRepository()
+def session_repo(_engine):
+    return SQLiteSessionRepository(_engine)
+
+
+@pytest.fixture()
+def fleet_repo(_engine):
+    return SQLiteFleetRepository(_engine)
 
 
 @pytest.fixture()

@@ -7,24 +7,34 @@ from legion.api.main import create_app
 from legion.domain.agent import Agent, AgentStatus
 from legion.domain.job import Job, JobStatus, JobType
 from legion.domain.session import Session
-from legion.services.fleet_repository import InMemoryFleetRepository
-from legion.services.job_repository import InMemoryJobRepository
-from legion.services.session_repository import InMemorySessionRepository
+from legion.plumbing.database import create_all, create_engine
+from legion.services.fleet_repository import SQLiteFleetRepository
+from legion.services.job_repository import SQLiteJobRepository
+from legion.services.session_repository import SQLiteSessionRepository
 
 
 @pytest.fixture()
-def fleet_repo():
-    return InMemoryFleetRepository()
+def _engine():
+    engine = create_engine("sqlite:///:memory:")
+    # Import Row classes by importing repo modules (already done above),
+    # then create all tables.
+    create_all(engine)
+    return engine
 
 
 @pytest.fixture()
-def job_repo():
-    return InMemoryJobRepository()
+def fleet_repo(_engine):
+    return SQLiteFleetRepository(_engine)
 
 
 @pytest.fixture()
-def session_repo():
-    return InMemorySessionRepository()
+def job_repo(_engine):
+    return SQLiteJobRepository(_engine)
+
+
+@pytest.fixture()
+def session_repo(_engine):
+    return SQLiteSessionRepository(_engine)
 
 
 @pytest.fixture()

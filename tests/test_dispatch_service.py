@@ -4,20 +4,28 @@ import pytest
 
 from legion.domain.agent import AgentStatus
 from legion.domain.job import JobStatus, JobType
+from legion.plumbing.database import create_all, create_engine
 from legion.services.dispatch_service import DispatchService
 from legion.services.exceptions import AgentNotFoundError, DispatchError
-from legion.services.fleet_repository import InMemoryFleetRepository
-from legion.services.job_repository import InMemoryJobRepository
+from legion.services.fleet_repository import SQLiteFleetRepository
+from legion.services.job_repository import SQLiteJobRepository
 
 
 @pytest.fixture()
-def fleet_repo():
-    return InMemoryFleetRepository()
+def _engine():
+    engine = create_engine("sqlite:///:memory:")
+    create_all(engine)
+    return engine
 
 
 @pytest.fixture()
-def job_repo():
-    return InMemoryJobRepository()
+def fleet_repo(_engine):
+    return SQLiteFleetRepository(_engine)
+
+
+@pytest.fixture()
+def job_repo(_engine):
+    return SQLiteJobRepository(_engine)
 
 
 @pytest.fixture()
@@ -122,6 +130,8 @@ class TestDispatchService:
         agent = service.register_agent("cg-1", "agent-01")
         job = service.create_job("org-1", "cg-1", JobType.TRIAGE, "alert")
         service.dispatch_pending("cg-1")
+        # Re-read from repo — SQLite returns new instances, not mutated originals
+        job = job_repo.get_by_id(job.id)
         assert job.status == JobStatus.DISPATCHED
 
         reverted = service.reassign_disconnected(agent.id)

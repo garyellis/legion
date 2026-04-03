@@ -1,4 +1,4 @@
-"""Tests for FleetRepository contract (InMemory + SQLite)."""
+"""Tests for FleetRepository contract (SQLite)."""
 
 import pytest
 
@@ -9,16 +9,11 @@ from legion.domain.filter_rule import FilterAction, FilterRule
 from legion.domain.organization import Organization
 from legion.domain.prompt_config import PromptConfig
 from legion.plumbing.database import create_all, create_engine
-from legion.services.fleet_repository import (
-    InMemoryFleetRepository,
-    SQLiteFleetRepository,
-)
+from legion.services.fleet_repository import SQLiteFleetRepository
 
 
-@pytest.fixture(params=["memory", "sqlite"])
-def repo(request):
-    if request.param == "memory":
-        return InMemoryFleetRepository()
+@pytest.fixture()
+def repo():
     engine = create_engine("sqlite:///:memory:")
     create_all(engine)
     return SQLiteFleetRepository(engine)

@@ -3,8 +3,9 @@
 import pytest
 
 from legion.domain.incident import IncidentSeverity, IncidentStatus
+from legion.plumbing.database import create_all, create_engine
 from legion.services.incident_service import IncidentService
-from legion.services.repository import InMemoryIncidentRepository
+from legion.services.repository import SQLiteIncidentRepository
 from legion.slack.incident.models import InMemorySlackIncidentIndex, SlackIncidentState
 
 
@@ -16,7 +17,9 @@ class TestIncidentIntegration:
         stale_events = []
         resolve_events = []
 
-        repo = InMemoryIncidentRepository()
+        engine = create_engine("sqlite:///:memory:")
+        create_all(engine)
+        repo = SQLiteIncidentRepository(engine)
         service = IncidentService(
             repo,
             on_stale_incident=lambda inc: stale_events.append(inc.id),

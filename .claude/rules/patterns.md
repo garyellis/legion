@@ -22,6 +22,7 @@ class KubernetesConfig(LegionConfig):
 
 ```python
 from abc import ABC, abstractmethod
+from sqlalchemy import Engine
 
 class JobRepository(ABC):
     @abstractmethod
@@ -30,9 +31,9 @@ class JobRepository(ABC):
     @abstractmethod
     def get_by_id(self, job_id: str) -> Job | None: ...
 
-class InMemoryJobRepository(JobRepository):
-    def __init__(self) -> None:
-        self._store: dict[str, Job] = {}
+class SQLiteJobRepository(JobRepository):
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
 ```
 
 ## Service with Callback Injection

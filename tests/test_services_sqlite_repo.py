@@ -4,23 +4,18 @@ import pytest
 
 from legion.domain.incident import Incident, IncidentSeverity, IncidentStatus
 from legion.plumbing.database import create_all, create_engine
-from legion.services.repository import (
-    InMemoryIncidentRepository,
-    SQLiteIncidentRepository,
-)
+from legion.services.repository import SQLiteIncidentRepository
 
 
-@pytest.fixture(params=["memory", "sqlite"])
-def repo(request):
-    if request.param == "memory":
-        return InMemoryIncidentRepository()
+@pytest.fixture()
+def repo():
     engine = create_engine("sqlite:///:memory:")
     create_all(engine)
     return SQLiteIncidentRepository(engine)
 
 
 class TestRepositoryContract:
-    """Both repo implementations must pass identical tests."""
+    """SQLite repo implementation tests."""
 
     def test_save_and_get(self, repo):
         inc = Incident(title="t", description="d", severity=IncidentSeverity.SEV1)

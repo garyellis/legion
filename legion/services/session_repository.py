@@ -1,4 +1,4 @@
-"""Session persistence — ABC + InMemory + SQLite implementations."""
+"""Session persistence — ABC + SQLite implementation."""
 
 from __future__ import annotations
 
@@ -34,40 +34,6 @@ class SessionRepository(ABC):
 
     @abstractmethod
     def list_active(self, cluster_group_id: str | None = None) -> list[Session]: ...
-
-
-# ---------------------------------------------------------------------------
-# In-memory implementation
-# ---------------------------------------------------------------------------
-
-class InMemorySessionRepository(SessionRepository):
-    def __init__(self) -> None:
-        self._store: dict[str, Session] = {}
-
-    def save(self, session: Session) -> None:
-        self._store[session.id] = session
-
-    def get_by_id(self, session_id: str) -> Optional[Session]:
-        return self._store.get(session_id)
-
-    def get_active_by_thread(
-        self, channel_id: str, thread_ts: str
-    ) -> Optional[Session]:
-        for s in self._store.values():
-            if (
-                s.slack_channel_id == channel_id
-                and s.slack_thread_ts == thread_ts
-                and s.status == SessionStatus.ACTIVE
-            ):
-                return s
-        return None
-
-    def list_active(self, cluster_group_id: str | None = None) -> list[Session]:
-        return [
-            s for s in self._store.values()
-            if s.status == SessionStatus.ACTIVE
-            and (cluster_group_id is None or s.cluster_group_id == cluster_group_id)
-        ]
 
 
 # ---------------------------------------------------------------------------

@@ -1,22 +1,30 @@
-"""Tests for legion.services.incident_service with in-memory repo."""
+"""Tests for legion.services.incident_service with SQLite repo."""
 
 import pytest
 
 from legion.domain.incident import IncidentSeverity, IncidentStatus
+from legion.plumbing.database import create_all, create_engine
 from legion.services.incident_service import IncidentService
-from legion.services.repository import InMemoryIncidentRepository
+from legion.services.repository import SQLiteIncidentRepository
 
 
 @pytest.fixture()
-def service():
-    return IncidentService(InMemoryIncidentRepository())
+def _engine():
+    engine = create_engine("sqlite:///:memory:")
+    create_all(engine)
+    return engine
+
+
+@pytest.fixture()
+def service(_engine):
+    return IncidentService(SQLiteIncidentRepository(_engine))
 
 
 class TestIncidentService:
     def test_create_and_get(self, service):
         inc = service.create_incident("outage", "db down", IncidentSeverity.SEV1, "U1")
         assert inc.title == "outage"
-        assert service.get_incident(inc.id) is inc
+        assert service.get_incident(inc.id) is not None
 
     def test_get_nonexistent_returns_none(self, service):
         assert service.get_incident("nope") is None
@@ -47,10 +55,10 @@ class TestIncidentService:
         updated = service.update_severity(inc.id, IncidentSeverity.SEV1)
         assert updated.severity == IncidentSeverity.SEV1
 
-    def test_resolved_callback_fires(self):
+    def test_resolved_callback_fires(self, _engine):
         calls = []
         svc = IncidentService(
-            InMemoryIncidentRepository(),
+            SQLiteIncidentRepository(_engine),
             on_incident_resolved=lambda inc, summary: calls.append((inc.id, summary)),
         )
         inc = svc.create_incident("a", "d", IncidentSeverity.SEV2, "U1")
@@ -58,10 +66,10 @@ class TestIncidentService:
         assert len(calls) == 1
         assert calls[0][1] == "fix"
 
-    def test_stale_callback_fires(self):
+    def test_stale_callback_fires(self, _engine):
         calls = []
         svc = IncidentService(
-            InMemoryIncidentRepository(),
+            SQLiteIncidentRepository(_engine),
             on_stale_incident=lambda inc: calls.append(inc.id),
         )
         inc = svc.create_incident("a", "d", IncidentSeverity.SEV2, "U1", check_in_interval=0)

@@ -1,19 +1,14 @@
-"""Tests for SessionRepository contract (InMemory + SQLite)."""
+"""Tests for SessionRepository contract (SQLite)."""
 
 import pytest
 
 from legion.domain.session import Session, SessionStatus
 from legion.plumbing.database import create_all, create_engine
-from legion.services.session_repository import (
-    InMemorySessionRepository,
-    SQLiteSessionRepository,
-)
+from legion.services.session_repository import SQLiteSessionRepository
 
 
-@pytest.fixture(params=["memory", "sqlite"])
-def repo(request):
-    if request.param == "memory":
-        return InMemorySessionRepository()
+@pytest.fixture()
+def repo():
     engine = create_engine("sqlite:///:memory:")
     create_all(engine)
     return SQLiteSessionRepository(engine)

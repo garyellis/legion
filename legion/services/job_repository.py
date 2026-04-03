@@ -1,4 +1,4 @@
-"""Job persistence — ABC + InMemory + SQLite implementations."""
+"""Job persistence — ABC + SQLite implementation."""
 
 from __future__ import annotations
 
@@ -37,38 +37,6 @@ class JobRepository(ABC):
 
     @abstractmethod
     def list_active(self, cluster_group_id: str | None = None) -> list[Job]: ...
-
-
-# ---------------------------------------------------------------------------
-# In-memory implementation
-# ---------------------------------------------------------------------------
-
-class InMemoryJobRepository(JobRepository):
-    def __init__(self) -> None:
-        self._store: dict[str, Job] = {}
-
-    def save(self, job: Job) -> None:
-        self._store[job.id] = job
-
-    def get_by_id(self, job_id: str) -> Optional[Job]:
-        return self._store.get(job_id)
-
-    def list_pending(self, cluster_group_id: str) -> list[Job]:
-        return [
-            j for j in self._store.values()
-            if j.cluster_group_id == cluster_group_id
-            and j.status == JobStatus.PENDING
-        ]
-
-    def list_by_agent(self, agent_id: str) -> list[Job]:
-        return [j for j in self._store.values() if j.agent_id == agent_id]
-
-    def list_active(self, cluster_group_id: str | None = None) -> list[Job]:
-        return [
-            j for j in self._store.values()
-            if j.status not in _TERMINAL_STATUSES
-            and (cluster_group_id is None or j.cluster_group_id == cluster_group_id)
-        ]
 
 
 # ---------------------------------------------------------------------------

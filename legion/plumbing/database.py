@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import Engine
 from sqlalchemy import create_engine as _sa_create_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import StaticPool
 
 
 class Base(DeclarativeBase):
@@ -30,6 +31,10 @@ def create_engine(db_url: str, **kwargs: Any) -> Engine:
         connect_args = dict(kwargs.pop("connect_args", {}) or {})  # type: ignore[arg-type]
         connect_args.setdefault("check_same_thread", False)
         kwargs["connect_args"] = connect_args
+
+        # In-memory SQLite needs StaticPool so all connections share one DB.
+        if ":memory:" in db_url:
+            kwargs.setdefault("poolclass", StaticPool)
 
     return _sa_create_engine(db_url, **kwargs)  # type: ignore[arg-type]
 

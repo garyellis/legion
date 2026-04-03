@@ -1,4 +1,4 @@
-"""Incident persistence — ABC + implementations."""
+"""Incident persistence — ABC + SQLite implementation."""
 
 from __future__ import annotations
 
@@ -30,28 +30,6 @@ class IncidentRepository(ABC):
 
     @abstractmethod
     def list_active(self) -> list[Incident]: ...
-
-
-# ---------------------------------------------------------------------------
-# In-memory implementation
-# ---------------------------------------------------------------------------
-
-class InMemoryIncidentRepository(IncidentRepository):
-    def __init__(self) -> None:
-        self._store: dict[str, Incident] = {}
-
-    def save(self, incident: Incident) -> None:
-        self._store[incident.id] = incident
-
-    def get_by_id(self, incident_id: str) -> Optional[Incident]:
-        return self._store.get(incident_id)
-
-    def list_active(self) -> list[Incident]:
-        return [
-            i
-            for i in self._store.values()
-            if i.status not in (IncidentStatus.RESOLVED, IncidentStatus.CLOSED)
-        ]
 
 
 # ---------------------------------------------------------------------------
