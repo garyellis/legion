@@ -28,3 +28,19 @@ class OrchestrationError(ServiceError):
 
 class DuplicateError(ServiceError):
     """Attempted to create a resource that already exists."""
+
+
+class DispatchError(ServiceError):
+    """Job dispatch failed."""
+
+
+class AgentNotFoundError(ServiceError):
+    """Referenced agent does not exist."""
+
+
+class SessionError(ServiceError):
+    """Session lifecycle error."""
+
+
+class FilterError(ServiceError):
+    """Filter rule evaluation failed."""
