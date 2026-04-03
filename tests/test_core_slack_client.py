@@ -44,7 +44,8 @@ class TestSlackClient:
         blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "hi"}}]
         client.post_message("C123", "hi", blocks=blocks)
         call_kwargs = client._client.api_call.call_args
-        assert "blocks" in call_kwargs.kwargs.get("params", call_kwargs[1])
+        json_payload = call_kwargs.kwargs.get("json", {})
+        assert "blocks" in json_payload
 
     def test_api_error_raises_external_api_error(self, client):
         from slack_sdk.errors import SlackApiError
