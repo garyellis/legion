@@ -43,7 +43,7 @@ class VMInstance(BaseModel):
     @property
     def specs_str(self) -> str:
         """Returns a compact string of the VM hardware specs."""
-        if self.vcpus is None:
+        if self.vcpus is None or self.ram_mb is None or self.disk_gb is None:
             return "N/A"
         return f"{self.vcpus} vCPU | {self.ram_mb/1024:.1f} GB RAM | {self.disk_gb} GB Disk"
     
@@ -62,7 +62,9 @@ class VMInstance(BaseModel):
         for _, addr_list in self.addresses.items():
             for addr in addr_list:
                 if addr.get("version") == 4:
-                    ips.append(addr.get("addr"))
+                    ip = addr.get("addr")
+                    if ip is not None:
+                        ips.append(ip)
         return ips
 
     def __str__(self):

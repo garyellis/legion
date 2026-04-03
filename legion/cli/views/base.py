@@ -7,13 +7,15 @@ console = Console()
 
 def get_progress_bar(description: str, total: int) -> Progress:
     """Returns a standardized progress bar for CLI operations."""
-    return Progress(
+    progress = Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TaskProgressColumn(),
-        console=console
+        console=console,
     )
+    progress.add_task(description, total=total)
+    return progress
 
 def render_error(message: str, hint: Optional[str] = None):
     """Displays a standardized error message."""

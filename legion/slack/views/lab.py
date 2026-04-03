@@ -5,7 +5,7 @@ from .base import SlackView
 class LabSlackView(SlackView):
     """Render Lab (OpenStack) data for Slack."""
 
-    def render_vm_list(self, vms: List[VMInstance], filter_pattern: str = None) -> List[Dict[str, Any]]:
+    def render_vm_list(self, vms: List[VMInstance], filter_pattern: str | None = None) -> List[Dict[str, Any]]:
         if not vms:
             return [self.section("ℹ️ _No VMs found matching the criteria._")]
 

@@ -2,7 +2,7 @@ import logging
 import re
 import fnmatch
 from typing import List, Callable, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 
 # Import our production-grade manager and models
 from legion.core.openstack.compute import OpenStackCompute
@@ -11,7 +11,7 @@ from legion.core.openstack.models import VMInstance, LifecycleResult
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def get_compute(cloud: str = None) -> OpenStackCompute:
+def get_compute(cloud: str | None = None) -> OpenStackCompute:
     """Helper to initialize the OpenStack manager."""
     try:
         return OpenStackCompute(cloud_name=cloud)
@@ -60,13 +60,13 @@ def run_batch_lifecycle(
         "resume": compute.resume_vm,
     }
     
-    action_func = action_map.get(action)
-    if not action_func:
+    if action not in action_map:
         raise ValueError(f"Unknown action: {action}")
+    action_func = action_map[action]
 
     with ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_vm = {
-            executor.submit(action_func, vm.id): vm.name 
+        future_to_vm: dict[Future[LifecycleResult], str] = {
+            executor.submit(action_func, vm.id): vm.name  # type: ignore[arg-type]
             for vm in vms
         }
         

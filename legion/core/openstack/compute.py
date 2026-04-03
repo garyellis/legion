@@ -119,6 +119,8 @@ class OpenStackCompute:
                 "resume": self.conn.compute.resume_server,
             }
             action_func = action_map.get(action)
+            if action_func is None:
+                raise ValueError(f"Unknown lifecycle action: {action}")
             action_func(server)
             
             if wait:

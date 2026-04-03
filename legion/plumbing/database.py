@@ -5,6 +5,8 @@ Single Base and engine factory used by all layers.
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import Engine
 from sqlalchemy import create_engine as _sa_create_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -16,7 +18,7 @@ class Base(DeclarativeBase):
     pass
 
 
-def create_engine(db_url: str, **kwargs: object) -> Engine:
+def create_engine(db_url: str, **kwargs: Any) -> Engine:
     """Create a SQLAlchemy engine with sensible defaults.
 
     For SQLite URLs, automatically sets ``check_same_thread=False`` so the

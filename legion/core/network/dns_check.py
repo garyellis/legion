@@ -125,11 +125,12 @@ class DNSMigrationManager:
     def fetch_local_records(self):
         try:
             answers = dns.resolver.resolve(self.config.domain, "A")
+            rrset = answers.rrset
             record = DNSRecord(
                 source=RecordSource.LOCAL,
                 name=self.config.domain,
                 rtype="A",
-                ttl=answers.rrset.ttl,
+                ttl=rrset.ttl if rrset is not None else 0,
                 values=[str(rdata) for rdata in answers]
             )
             self.records.append(record)
