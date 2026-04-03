@@ -14,12 +14,23 @@ def load_cli_commands() -> None:
         importlib.import_module(f"legion.cli.commands.{module_name}")
 
 def register_with_typer() -> None:
+    """Build Typer command tree from the registry.
+
+    Groups support dotted names for nesting: ``register_command("a.b", "c")``
+    produces ``legion-cli a b c``.
+    """
     group_apps: dict[str, typer.Typer] = {}
 
     for group, name, func in get_registry():
-        if group not in group_apps:
-            group_apps[group] = typer.Typer()
-            app.add_typer(group_apps[group], name=group)
+        parts = group.split(".")
+        # Walk / create the nested group chain
+        for i, part in enumerate(parts):
+            key = ".".join(parts[: i + 1])
+            if key not in group_apps:
+                group_apps[key] = typer.Typer()
+                parent_key = ".".join(parts[:i]) if i > 0 else None
+                parent = group_apps[parent_key] if parent_key else app
+                parent.add_typer(group_apps[key], name=part)
         group_apps[group].command(name)(func)
 
 def main() -> None:
