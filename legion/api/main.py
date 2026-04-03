@@ -16,6 +16,7 @@ from legion.api.routes import (
     channel_mappings,
     cluster_groups,
     filter_rules,
+    health,
     jobs,
     organizations,
     prompt_configs,
@@ -95,6 +96,7 @@ def create_app(
 
     register_error_handlers(app)
 
+    app.include_router(health.router)
     app.include_router(organizations.router)
     app.include_router(cluster_groups.router)
     app.include_router(agents.router)
