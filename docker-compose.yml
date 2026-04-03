@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: legion
+      POSTGRES_PASSWORD: legion
+      POSTGRES_DB: legion
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "legion"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  api:
+    build: .
+    command: legion-api
+    ports:
+      - "8000:8000"
+    environment:
+      API_HOST: "0.0.0.0"
+      API_PORT: "8000"
+      API_LOG_LEVEL: "DEBUG"
+      API_LOG_FORMAT: "TEXT"
+      DATABASE_URL: "postgresql+psycopg://legion:legion@postgres:5432/legion"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health/ready').raise_for_status()"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+
+  # Future: React frontend
+  # frontend:
+  #   build: ./frontend
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     api:
+  #       condition: service_healthy
+
+  demo-agent:
+    build: .
+    command: python local/demo_agent.py demo-agent-1
+    environment:
+      LEGION_API_URL: "ws://api:8000"
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - demo
+
+volumes:
+  pgdata:

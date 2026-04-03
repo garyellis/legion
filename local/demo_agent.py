@@ -3,12 +3,14 @@
 
 import asyncio
 import json
+import os
 import sys
 
 import websockets
 
 
-async def main(agent_id: str, base_url: str = "ws://127.0.0.1:8000") -> None:
+async def main(agent_id: str, base_url: str | None = None) -> None:
+    base_url = base_url or os.environ.get("LEGION_API_URL", "ws://127.0.0.1:8000")
     uri = f"{base_url}/ws/agents/{agent_id}"
     print(f"Connecting to {uri} ...")
 

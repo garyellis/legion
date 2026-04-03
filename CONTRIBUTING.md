@@ -151,6 +151,15 @@ uv run legion-cli architecture secrets-check   # sensitive file detection
 git config core.hooksPath .githooks
 ```
 
+### Docker (full stack)
+
+```bash
+docker compose up                          # API + PostgreSQL + Redis
+docker compose --profile demo up           # ... plus a demo agent
+docker compose run --rm api uv run pytest  # run tests against PostgreSQL
+docker compose down -v                     # tear down and wipe data
+```
+
 ---
 
 ## Adding a New Core Domain
