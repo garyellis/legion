@@ -6,9 +6,7 @@ How to work in this codebase without breaking it.
 
 ## The Architecture in 60 Seconds
 
-The platform is a headless core consumed by multiple surfaces. Business
-logic is written once and exposed through CLI, Slack, HTTP API, and AI agents
-without duplication.
+Headless core consumed by multiple surfaces. Business logic is written once and exposed through CLI, Slack, HTTP API, and AI agents without duplication.
 
 ```
               +--------+--------+--------+
@@ -37,84 +35,19 @@ Imports flow downward. Callbacks flow upward. No exceptions.
 
 ---
 
-## Six Constraints (Priority Order)
+## Layers
 
-When constraints conflict, higher-numbered ones yield to lower-numbered ones.
+| Layer | What lives here | Imports from |
+|:------|:----------------|:-------------|
+| `plumbing/` | Config, exceptions, database, logging | Nothing from `legion/` |
+| `internal/` | Architecture checks, dev tooling | Nothing from `legion/` |
+| `core/` | SDK wrappers, infrastructure adapters, colocated models | `plumbing/` only |
+| `domain/` | Cross-cutting Pydantic models (Incident, Job, Session) | `plumbing/`, `core/` models |
+| `services/` | Stateful coordinators, repositories, scheduling | `plumbing/`, `core/`, `domain/` |
+| `agents/` | LLM config, chains, personas | `plumbing/`, `core/`, `domain/`, `services/` |
+| Surfaces | Thin entry points: parse input, call logic, format output | Any layer below, never each other |
 
-| # | Constraint | What it means |
-|:--|:-----------|:--------------|
-| 1 | **Clarity** | A new engineer reads the folder name and knows what's inside. |
-| 2 | **Dependency direction** | Imports flow downward through the layers. Never violated, even for convenience. |
-| 3 | **Single owner** | Every concept has exactly one canonical home. `grep` for where `Incident` is defined and you get one result. |
-| 4 | **Testability** | Every layer is testable in isolation. Core needs no mocks. Services need only interface mocks. |
-| 5 | **Additive extensibility** | Adding a new domain or surface requires zero changes to existing code. |
-| 6 | **Minimal layers** | A layer that doesn't earn its keep is deleted. Three clear layers beat five theoretical ones. |
-
----
-
-## Layer Definitions
-
-### `plumbing/` — Shared infrastructure
-
-Base config, exception hierarchy, database engine, logging setup. Imported by every layer.
-Imports nothing from `legion/`.
-
-### `core/` — One API, one adapter
-
-Pure functions and SDK wrappers. Each subdirectory is one infrastructure domain.
-Models are colocated with the logic that produces them.
-
-- **Imports**: `plumbing/` + stdlib + external SDKs. Nothing else from `legion/`.
-- **Test strategy**: Integration tests against real or mocked SDKs.
-
-Why models live here: `VMInstance` is meaningless without `OpenStackCompute`.
-They share a bounded context. Separating them into `domain/` creates artificial distance.
-
-### `domain/` — Concepts that span multiple APIs
-
-Pure Pydantic models for business entities that cross core domain boundaries.
-No logic, no API calls, no persistence.
-
-- **Imports**: `plumbing/`, `core/` models only (for type references, never logic).
-- **Litmus test**: "Does this entity involve decisions across multiple core domains?" If yes, `domain/`. If it maps 1:1 to an SDK response, it stays in `core/`.
-
-Examples: `Incident` spans K8s + Prometheus + Slack. `Job` coordinates agent dispatch
-across multiple infrastructure domains. Neither belongs to a single core domain.
-
-### `services/` — Coordination with state
-
-Stateful coordinators that own persistence, scheduling, and cross-domain workflows.
-
-- **Imports**: `plumbing/`, `core/`, `domain/`. Never from agents or surfaces.
-- **Communication outward**: Via injected callbacks, not surface imports.
-- **Dependencies**: Received via constructor injection.
-- **Litmus test**: "Does this need a constructor with injected dependencies?" If yes, service. If it's a pure function, `core/`.
-
-```python
-class IncidentService:
-    def __init__(self, repository: IncidentRepository,
-                 on_incident_created: Callable[[Incident], Awaitable[None]] | None = None):
-        self._repo = repository
-        self._on_created = on_incident_created  # Callback, not import
-```
-
-The distinction from core is statefulness. Core orchestrators are stateless
-pipelines (fetch, filter, return). Services maintain state across calls.
-
-### `agents/` — AI runtime
-
-LLM agent infrastructure: model configuration, chains (simple prompt-LLM pipelines),
-and persona configs.
-
-- **Imports**: `plumbing/`, `core/`, `domain/`, `services/`. Never imported by them.
-
-### Surfaces — `cli/`, `slack/`, `api/`
-
-Independent consumers of the layers below. Thin. Parse input, call logic, format output.
-
-- Never imported by anything else. No surface imports from another surface.
-- Formatting is a surface concern. Rich tables in `cli/views/`, Block Kit in `slack/views/`, JSON in `api/`.
-- Each surface is a standalone entry point with its own DI wiring at startup.
+Models that map 1:1 to an API response stay in `core/`. Models that span multiple core domains go in `domain/`. See `CLAUDE.md` for full rationale.
 
 ---
 
@@ -137,11 +70,7 @@ Does it parse input or format output for a specific medium?
   -> Surface layer (cli/, slack/, api/).
 ```
 
-### Pass-throughs skip services
-
-Not every command needs a service. If a CLI command is a thin wrapper around one
-core function, call `core/` directly from the surface. Don't force everything
-through a service layer.
+Not every command needs a service. If a CLI command wraps one core function, call `core/` directly from the surface.
 
 ---
 
@@ -167,8 +96,7 @@ Enforced by `uv run legion-cli architecture check` and `tests/test_dependency_di
 
 ### Services communicate via callbacks
 
-Services never import surfaces. When a service needs to notify the outside world,
-it calls an injected callback. The surface wires the callback at startup:
+Services never import surfaces. Outward communication uses injected callbacks:
 
 ```python
 # slack/main.py (startup wiring)
@@ -180,9 +108,7 @@ incident_service = IncidentService(
 
 ### Dependencies require ADRs
 
-Every new dependency requires a decision record in `docs/decisionlog/`. Document
-why it's needed, alternatives considered, license, maintenance status, and supply
-chain risk. See the template at `docs/decisionlog/0000-template.md`.
+Every new dependency requires a decision record in `docs/decisionlog/`. See `docs/decisionlog/0000-template.md` for the format.
 
 ---
 
@@ -197,7 +123,6 @@ chain risk. See the template at `docs/decisionlog/0000-template.md`.
 | `import rich` in `core/` | Rendering belongs in `cli/views/` |
 | `from legion.slack import X` in `services/` | Use callback injection |
 | Slack-specific fields on domain models | Surface-specific state in `slack/` |
-| Vendor payload parsing in `domain/` | Parsing is a boundary concern; put it in the surface |
 
 ---
 
@@ -211,24 +136,33 @@ uv sync --group dev
 # Run tests
 uv run pytest
 
-# Architecture checks
-uv run legion-cli architecture check
+# Architecture checks (run before committing)
+uv run legion-cli architecture check           # layer violations + banned imports
+uv run legion-cli architecture typecheck       # mypy
+uv run legion-cli architecture circular        # circular import detection
+uv run legion-cli architecture deadcode        # vulture dead code
+uv run legion-cli architecture unused-deps     # unused dependency detection
+uv run legion-cli architecture dangerous-calls # eval/exec/pickle restrictions
+uv run legion-cli architecture security        # bandit SAST
+uv run legion-cli architecture audit           # pip-audit CVE scan
+uv run legion-cli architecture secrets-check   # sensitive file detection
 
-# Enable pre-commit hook
+# Enable pre-commit hook (runs gate checks automatically)
 git config core.hooksPath .githooks
 ```
+
+---
 
 ## Adding a New Core Domain
 
 Example: adding Cloudflare support.
 
 1. Create `core/cloudflare/client.py` with SDK wrapper functions.
-2. Create `core/cloudflare/models.py` for domain models.
+2. Create `core/cloudflare/models.py` for colocated models.
 3. Write tests.
 4. Zero changes to existing code.
 
-A CLI command or Slack command can call the core functions directly. If it later
-needs to participate in a multi-step workflow, a service will coordinate it.
+A surface command can call the core functions directly. If it later needs multi-step coordination, a service will handle it.
 
 ## Adding a New Surface Command
 
@@ -236,6 +170,7 @@ Pass-through (no service needed):
 
 ```python
 # cli/commands/cloudflare.py
+from legion.cli.registry import register_command
 from legion.core.cloudflare.client import get_proxy_status
 
 @register_command("network", "proxy-status")
@@ -248,6 +183,7 @@ Orchestrated (service needed):
 
 ```python
 # cli/commands/failover.py
+from legion.cli.registry import register_command
 from legion.services.failover_service import FailoverService
 
 @register_command("ops", "failover")
