@@ -35,7 +35,7 @@ class SessionService:
     def get_or_create(
         self,
         org_id: str,
-        cluster_group_id: str,
+        agent_group_id: str,
         channel_id: str,
         thread_ts: str,
     ) -> tuple[Session, bool]:
@@ -50,7 +50,7 @@ class SessionService:
 
         session = Session(
             org_id=org_id,
-            cluster_group_id=cluster_group_id,
+            agent_group_id=agent_group_id,
             slack_channel_id=channel_id,
             slack_thread_ts=thread_ts,
         )

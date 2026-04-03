@@ -41,13 +41,13 @@ class DispatchService:
     def create_job(
         self,
         org_id: str,
-        cluster_group_id: str,
+        agent_group_id: str,
         job_type: JobType,
         payload: str,
     ) -> Job:
         job = Job(
             org_id=org_id,
-            cluster_group_id=cluster_group_id,
+            agent_group_id=agent_group_id,
             type=job_type,
             payload=payload,
         )
@@ -55,10 +55,10 @@ class DispatchService:
         logger.info("Job created: %s (%s)", job.id, job.type.value)
         return job
 
-    def dispatch_pending(self, cluster_group_id: str) -> list[tuple[Job, Agent]]:
+    def dispatch_pending(self, agent_group_id: str) -> list[tuple[Job, Agent]]:
         """Assign pending jobs to idle agents in the given cluster group."""
-        pending = self.job_repo.list_pending(cluster_group_id)
-        idle = list(self.fleet_repo.list_idle_agents(cluster_group_id))
+        pending = self.job_repo.list_pending(agent_group_id)
+        idle = list(self.fleet_repo.list_idle_agents(agent_group_id))
         dispatched: list[tuple[Job, Agent]] = []
 
         for job in pending:
@@ -116,12 +116,12 @@ class DispatchService:
 
     def register_agent(
         self,
-        cluster_group_id: str,
+        agent_group_id: str,
         name: str,
         capabilities: list[str] | None = None,
     ) -> Agent:
         agent = Agent(
-            cluster_group_id=cluster_group_id,
+            agent_group_id=agent_group_id,
             name=name,
             capabilities=capabilities or [],
             status=AgentStatus.IDLE,

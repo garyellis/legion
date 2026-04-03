@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 
 class Organization(BaseModel):
-    """Top-level tenant that owns cluster groups and agents."""
+    """Top-level tenant that owns agent groups and agents."""
 
     model_config = {"validate_assignment": True}
 

@@ -17,7 +17,7 @@ def repo():
 class TestSessionRepositoryContract:
     def test_save_and_get(self, repo):
         s = Session(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             slack_channel_id="C123", slack_thread_ts="1234.5678",
         )
         repo.save(s)
@@ -31,7 +31,7 @@ class TestSessionRepositoryContract:
 
     def test_get_active_by_thread(self, repo):
         s = Session(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             slack_channel_id="C123", slack_thread_ts="1234.5678",
         )
         repo.save(s)
@@ -41,7 +41,7 @@ class TestSessionRepositoryContract:
 
     def test_get_active_by_thread_returns_none_for_closed(self, repo):
         s = Session(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             slack_channel_id="C123", slack_thread_ts="1234.5678",
         )
         s.close()
@@ -52,25 +52,25 @@ class TestSessionRepositoryContract:
         assert repo.get_active_by_thread("C999", "0000.0000") is None
 
     def test_list_active(self, repo):
-        s1 = Session(org_id="org-1", cluster_group_id="cg-1")
-        s2 = Session(org_id="org-1", cluster_group_id="cg-1")
-        s3 = Session(org_id="org-1", cluster_group_id="cg-2")
+        s1 = Session(org_id="org-1", agent_group_id="ag-1")
+        s2 = Session(org_id="org-1", agent_group_id="ag-1")
+        s3 = Session(org_id="org-1", agent_group_id="ag-2")
         repo.save(s1)
         repo.save(s2)
         repo.save(s3)
-        assert len(repo.list_active("cg-1")) == 2
+        assert len(repo.list_active("ag-1")) == 2
         assert len(repo.list_active()) == 3
 
     def test_list_active_excludes_closed(self, repo):
-        s = Session(org_id="org-1", cluster_group_id="cg-1")
+        s = Session(org_id="org-1", agent_group_id="ag-1")
         repo.save(s)
         s.close()
         repo.save(s)
-        assert len(repo.list_active("cg-1")) == 0
+        assert len(repo.list_active("ag-1")) == 0
 
     def test_lifecycle_after_reload(self, repo):
         """Closing a reloaded session must not raise due to tz mismatch."""
-        s = Session(org_id="org-1", cluster_group_id="cg-1")
+        s = Session(org_id="org-1", agent_group_id="ag-1")
         repo.save(s)
         loaded = repo.get_by_id(s.id)
         assert loaded is not None

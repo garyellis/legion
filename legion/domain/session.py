@@ -21,7 +21,7 @@ class Session(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     org_id: str
-    cluster_group_id: str
+    agent_group_id: str
     agent_id: str | None = None
     slack_channel_id: str | None = None
     slack_thread_ts: str | None = None

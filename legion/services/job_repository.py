@@ -30,13 +30,13 @@ class JobRepository(ABC):
     def get_by_id(self, job_id: str) -> Optional[Job]: ...
 
     @abstractmethod
-    def list_pending(self, cluster_group_id: str) -> list[Job]: ...
+    def list_pending(self, agent_group_id: str) -> list[Job]: ...
 
     @abstractmethod
     def list_by_agent(self, agent_id: str) -> list[Job]: ...
 
     @abstractmethod
-    def list_active(self, cluster_group_id: str | None = None) -> list[Job]: ...
+    def list_active(self, agent_group_id: str | None = None) -> list[Job]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ class JobRow(Base):
 
     id = Column(String, primary_key=True)
     org_id = Column(String, nullable=False)
-    cluster_group_id = Column(String, nullable=False)
+    agent_group_id = Column(String, nullable=False)
     agent_id = Column(String, nullable=True)
     type = Column(String, nullable=False)
     status = Column(String, nullable=False, default=JobStatus.PENDING.value)
@@ -78,7 +78,7 @@ class SQLiteJobRepository(JobRepository):
                 row = JobRow(id=job.id)
                 session.add(row)
             row.org_id = job.org_id
-            row.cluster_group_id = job.cluster_group_id
+            row.agent_group_id = job.agent_group_id
             row.agent_id = job.agent_id
             row.type = job.type.value
             row.status = job.status.value
@@ -99,12 +99,12 @@ class SQLiteJobRepository(JobRepository):
                 return None
             return self._to_domain(row)
 
-    def list_pending(self, cluster_group_id: str) -> list[Job]:
+    def list_pending(self, agent_group_id: str) -> list[Job]:
         with self._session_factory() as session:
             rows = (
                 session.query(JobRow)
                 .filter(
-                    JobRow.cluster_group_id == cluster_group_id,
+                    JobRow.agent_group_id == agent_group_id,
                     JobRow.status == JobStatus.PENDING.value,
                 )
                 .all()
@@ -120,12 +120,12 @@ class SQLiteJobRepository(JobRepository):
             )
             return [self._to_domain(r) for r in rows]
 
-    def list_active(self, cluster_group_id: str | None = None) -> list[Job]:
+    def list_active(self, agent_group_id: str | None = None) -> list[Job]:
         terminal = [s.value for s in _TERMINAL_STATUSES]
         with self._session_factory() as session:
             q = session.query(JobRow).filter(JobRow.status.notin_(terminal))
-            if cluster_group_id is not None:
-                q = q.filter(JobRow.cluster_group_id == cluster_group_id)
+            if agent_group_id is not None:
+                q = q.filter(JobRow.agent_group_id == agent_group_id)
             return [self._to_domain(r) for r in q.all()]
 
     @staticmethod
@@ -140,7 +140,7 @@ class SQLiteJobRepository(JobRepository):
         return Job(
             id=row.id,
             org_id=row.org_id,
-            cluster_group_id=row.cluster_group_id,
+            agent_group_id=row.agent_group_id,
             agent_id=row.agent_id,
             type=JobType(row.type),
             status=JobStatus(row.status),

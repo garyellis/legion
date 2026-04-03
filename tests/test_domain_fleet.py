@@ -1,7 +1,7 @@
-"""Tests for fleet domain models: Organization, ClusterGroup, Agent, Job."""
+"""Tests for fleet domain models: Organization, AgentGroup, Agent, Job."""
 
 from legion.domain.agent import Agent, AgentStatus
-from legion.domain.cluster_group import ClusterGroup
+from legion.domain.agent_group import AgentGroup, ExecutionMode
 from legion.domain.job import Job, JobStatus, JobType
 from legion.domain.organization import Organization
 
@@ -16,41 +16,50 @@ class TestOrganization:
         assert org.updated_at.tzinfo is not None
 
 
-class TestClusterGroup:
+class TestAgentGroup:
     def test_creation_defaults(self):
-        cg = ClusterGroup(
+        ag = AgentGroup(
             org_id="org-1", name="US West", slug="us-west",
             environment="prod", provider="eks",
         )
-        assert cg.id
-        assert cg.org_id == "org-1"
-        assert cg.environment == "prod"
-        assert cg.provider == "eks"
+        assert ag.id
+        assert ag.org_id == "org-1"
+        assert ag.environment == "prod"
+        assert ag.provider == "eks"
+        assert ag.execution_mode == ExecutionMode.READ_ONLY
+
+    def test_execution_mode_override(self):
+        ag = AgentGroup(
+            org_id="org-1", name="Dev", slug="dev",
+            environment="dev", provider="aks",
+            execution_mode=ExecutionMode.AUTO_EXECUTE,
+        )
+        assert ag.execution_mode == ExecutionMode.AUTO_EXECUTE
 
 
 class TestAgent:
     def test_creation_defaults(self):
-        agent = Agent(cluster_group_id="cg-1", name="agent-01")
+        agent = Agent(agent_group_id="ag-1", name="agent-01")
         assert agent.status == AgentStatus.OFFLINE
         assert agent.current_job_id is None
         assert agent.capabilities == []
         assert agent.last_heartbeat is None
 
     def test_offline_to_idle(self):
-        agent = Agent(cluster_group_id="cg-1", name="a")
+        agent = Agent(agent_group_id="ag-1", name="a")
         agent.go_idle()
         assert agent.status == AgentStatus.IDLE
         assert agent.current_job_id is None
 
     def test_idle_to_busy(self):
-        agent = Agent(cluster_group_id="cg-1", name="a")
+        agent = Agent(agent_group_id="ag-1", name="a")
         agent.go_idle()
         agent.go_busy("job-1")
         assert agent.status == AgentStatus.BUSY
         assert agent.current_job_id == "job-1"
 
     def test_busy_to_idle(self):
-        agent = Agent(cluster_group_id="cg-1", name="a")
+        agent = Agent(agent_group_id="ag-1", name="a")
         agent.go_idle()
         agent.go_busy("job-1")
         agent.go_idle()
@@ -58,7 +67,7 @@ class TestAgent:
         assert agent.current_job_id is None
 
     def test_any_to_offline(self):
-        agent = Agent(cluster_group_id="cg-1", name="a")
+        agent = Agent(agent_group_id="ag-1", name="a")
         agent.go_idle()
         agent.go_busy("job-1")
         agent.go_offline()
@@ -66,7 +75,7 @@ class TestAgent:
         assert agent.current_job_id is None
 
     def test_heartbeat_updates_timestamp(self):
-        agent = Agent(cluster_group_id="cg-1", name="a")
+        agent = Agent(agent_group_id="ag-1", name="a")
         assert agent.last_heartbeat is None
         agent.heartbeat()
         assert agent.last_heartbeat is not None
@@ -76,7 +85,7 @@ class TestAgent:
 class TestJob:
     def test_creation_defaults(self):
         job = Job(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             type=JobType.TRIAGE, payload="alert fired",
         )
         assert job.status == JobStatus.PENDING
@@ -86,7 +95,7 @@ class TestJob:
 
     def test_lifecycle_pending_to_completed(self):
         job = Job(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             type=JobType.QUERY, payload="check logs",
         )
         job.dispatch_to("agent-1")
@@ -104,7 +113,7 @@ class TestJob:
 
     def test_fail_sets_error(self):
         job = Job(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             type=JobType.TRIAGE, payload="alert",
         )
         job.dispatch_to("agent-1")
@@ -116,7 +125,7 @@ class TestJob:
 
     def test_cancel_from_pending(self):
         job = Job(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             type=JobType.TRIAGE, payload="alert",
         )
         job.cancel()
@@ -125,7 +134,7 @@ class TestJob:
 
     def test_cancel_from_dispatched(self):
         job = Job(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             type=JobType.TRIAGE, payload="alert",
         )
         job.dispatch_to("agent-1")

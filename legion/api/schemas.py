@@ -17,7 +17,7 @@ class OrganizationCreate(BaseModel):
     slug: str
 
 
-class ClusterGroupCreate(BaseModel):
+class AgentGroupCreate(BaseModel):
     org_id: str
     name: str
     slug: str
@@ -28,7 +28,7 @@ class ClusterGroupCreate(BaseModel):
 class ChannelMappingCreate(BaseModel):
     org_id: str
     channel_id: str
-    cluster_group_id: str
+    agent_group_id: str
     mode: ChannelMode = ChannelMode.ALERT
 
 
@@ -47,7 +47,7 @@ class PromptConfigUpsert(BaseModel):
 
 class SessionCreate(BaseModel):
     org_id: str
-    cluster_group_id: str
+    agent_group_id: str
 
 
 class SessionMessage(BaseModel):

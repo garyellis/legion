@@ -1,6 +1,6 @@
 """Fleet persistence — ABC + SQLite implementation.
 
-Manages Organization, ClusterGroup, Agent, ChannelMapping, FilterRule,
+Manages Organization, AgentGroup, Agent, ChannelMapping, FilterRule,
 and PromptConfig entities.
 """
 
@@ -16,8 +16,8 @@ from sqlalchemy import Column, DateTime, Engine, Integer, String, Text
 from sqlalchemy.orm import sessionmaker
 
 from legion.domain.agent import Agent, AgentStatus
+from legion.domain.agent_group import AgentGroup, ExecutionMode
 from legion.domain.channel_mapping import ChannelMapping, ChannelMode
-from legion.domain.cluster_group import ClusterGroup
 from legion.domain.filter_rule import FilterAction, FilterRule
 from legion.domain.organization import Organization
 from legion.domain.prompt_config import PromptConfig
@@ -44,18 +44,18 @@ class FleetRepository(ABC):
     @abstractmethod
     def delete_org(self, org_id: str) -> bool: ...
 
-    # ClusterGroup
+    # AgentGroup
     @abstractmethod
-    def save_cluster_group(self, cg: ClusterGroup) -> None: ...
+    def save_agent_group(self, ag: AgentGroup) -> None: ...
 
     @abstractmethod
-    def get_cluster_group(self, cg_id: str) -> Optional[ClusterGroup]: ...
+    def get_agent_group(self, ag_id: str) -> Optional[AgentGroup]: ...
 
     @abstractmethod
-    def list_cluster_groups(self, org_id: str) -> list[ClusterGroup]: ...
+    def list_agent_groups(self, org_id: str) -> list[AgentGroup]: ...
 
     @abstractmethod
-    def delete_cluster_group(self, cg_id: str) -> bool: ...
+    def delete_agent_group(self, ag_id: str) -> bool: ...
 
     # Agent
     @abstractmethod
@@ -65,10 +65,10 @@ class FleetRepository(ABC):
     def get_agent(self, agent_id: str) -> Optional[Agent]: ...
 
     @abstractmethod
-    def list_agents(self, cluster_group_id: str) -> list[Agent]: ...
+    def list_agents(self, agent_group_id: str) -> list[Agent]: ...
 
     @abstractmethod
-    def list_idle_agents(self, cluster_group_id: str) -> list[Agent]: ...
+    def list_idle_agents(self, agent_group_id: str) -> list[Agent]: ...
 
     @abstractmethod
     def delete_agent(self, agent_id: str) -> bool: ...
@@ -110,7 +110,7 @@ class FleetRepository(ABC):
     def get_prompt_config(self, config_id: str) -> Optional[PromptConfig]: ...
 
     @abstractmethod
-    def get_prompt_config_by_cluster(self, cluster_group_id: str) -> Optional[PromptConfig]: ...
+    def get_prompt_config_by_agent_group(self, agent_group_id: str) -> Optional[PromptConfig]: ...
 
     @abstractmethod
     def delete_prompt_config(self, config_id: str) -> bool: ...
@@ -130,8 +130,8 @@ class OrganizationRow(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False)
 
 
-class ClusterGroupRow(Base):
-    __tablename__ = "cluster_groups"
+class AgentGroupRow(Base):
+    __tablename__ = "agent_groups"
 
     id = Column(String, primary_key=True)
     org_id = Column(String, nullable=False)
@@ -139,6 +139,7 @@ class ClusterGroupRow(Base):
     slug = Column(String, nullable=False)
     environment = Column(String, nullable=False)
     provider = Column(String, nullable=False)
+    execution_mode = Column(String, nullable=False, default=ExecutionMode.READ_ONLY.value)
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
 
@@ -147,7 +148,7 @@ class AgentRow(Base):
     __tablename__ = "agents"
 
     id = Column(String, primary_key=True)
-    cluster_group_id = Column(String, nullable=False)
+    agent_group_id = Column(String, nullable=False)
     name = Column(String, nullable=False)
     status = Column(String, nullable=False, default=AgentStatus.OFFLINE.value)
     current_job_id = Column(String, nullable=True)
@@ -163,7 +164,7 @@ class ChannelMappingRow(Base):
     id = Column(String, primary_key=True)
     org_id = Column(String, nullable=False)
     channel_id = Column(String, nullable=False, unique=True)
-    cluster_group_id = Column(String, nullable=False)
+    agent_group_id = Column(String, nullable=False)
     mode = Column(String, nullable=False, default=ChannelMode.ALERT.value)
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
@@ -185,7 +186,7 @@ class PromptConfigRow(Base):
     __tablename__ = "prompt_configs"
 
     id = Column(String, primary_key=True)
-    cluster_group_id = Column(String, nullable=False, unique=True)
+    agent_group_id = Column(String, nullable=False, unique=True)
     system_prompt = Column(Text, nullable=False, default="")
     stack_manifest = Column(Text, nullable=False, default="")
     persona = Column(Text, nullable=False, default="")
@@ -237,42 +238,43 @@ class SQLiteFleetRepository(FleetRepository):
             session.commit()
             return True
 
-    # -- ClusterGroup -------------------------------------------------------
+    # -- AgentGroup ---------------------------------------------------------
 
-    def save_cluster_group(self, cg: ClusterGroup) -> None:
+    def save_agent_group(self, ag: AgentGroup) -> None:
         with self._session_factory() as session:
-            row = session.get(ClusterGroupRow, cg.id)
+            row = session.get(AgentGroupRow, ag.id)
             if row is None:
-                row = ClusterGroupRow(id=cg.id)
+                row = AgentGroupRow(id=ag.id)
                 session.add(row)
-            row.org_id = cg.org_id
-            row.name = cg.name
-            row.slug = cg.slug
-            row.environment = cg.environment
-            row.provider = cg.provider
-            row.created_at = cg.created_at
-            row.updated_at = cg.updated_at
+            row.org_id = ag.org_id
+            row.name = ag.name
+            row.slug = ag.slug
+            row.environment = ag.environment
+            row.provider = ag.provider
+            row.execution_mode = ag.execution_mode.value
+            row.created_at = ag.created_at
+            row.updated_at = ag.updated_at
             session.commit()
 
-    def get_cluster_group(self, cg_id: str) -> Optional[ClusterGroup]:
+    def get_agent_group(self, ag_id: str) -> Optional[AgentGroup]:
         with self._session_factory() as session:
-            row = session.get(ClusterGroupRow, cg_id)
+            row = session.get(AgentGroupRow, ag_id)
             if row is None:
                 return None
-            return self._cg_to_domain(row)
+            return self._ag_to_domain(row)
 
-    def list_cluster_groups(self, org_id: str) -> list[ClusterGroup]:
+    def list_agent_groups(self, org_id: str) -> list[AgentGroup]:
         with self._session_factory() as session:
             rows = (
-                session.query(ClusterGroupRow)
-                .filter(ClusterGroupRow.org_id == org_id)
+                session.query(AgentGroupRow)
+                .filter(AgentGroupRow.org_id == org_id)
                 .all()
             )
-            return [self._cg_to_domain(r) for r in rows]
+            return [self._ag_to_domain(r) for r in rows]
 
-    def delete_cluster_group(self, cg_id: str) -> bool:
+    def delete_agent_group(self, ag_id: str) -> bool:
         with self._session_factory() as session:
-            row = session.get(ClusterGroupRow, cg_id)
+            row = session.get(AgentGroupRow, ag_id)
             if row is None:
                 return False
             session.delete(row)
@@ -287,7 +289,7 @@ class SQLiteFleetRepository(FleetRepository):
             if row is None:
                 row = AgentRow(id=agent.id)
                 session.add(row)
-            row.cluster_group_id = agent.cluster_group_id
+            row.agent_group_id = agent.agent_group_id
             row.name = agent.name
             row.status = agent.status.value
             row.current_job_id = agent.current_job_id
@@ -304,21 +306,21 @@ class SQLiteFleetRepository(FleetRepository):
                 return None
             return self._agent_to_domain(row)
 
-    def list_agents(self, cluster_group_id: str) -> list[Agent]:
+    def list_agents(self, agent_group_id: str) -> list[Agent]:
         with self._session_factory() as session:
             rows = (
                 session.query(AgentRow)
-                .filter(AgentRow.cluster_group_id == cluster_group_id)
+                .filter(AgentRow.agent_group_id == agent_group_id)
                 .all()
             )
             return [self._agent_to_domain(r) for r in rows]
 
-    def list_idle_agents(self, cluster_group_id: str) -> list[Agent]:
+    def list_idle_agents(self, agent_group_id: str) -> list[Agent]:
         with self._session_factory() as session:
             rows = (
                 session.query(AgentRow)
                 .filter(
-                    AgentRow.cluster_group_id == cluster_group_id,
+                    AgentRow.agent_group_id == agent_group_id,
                     AgentRow.status == AgentStatus.IDLE.value,
                 )
                 .all()
@@ -354,15 +356,16 @@ class SQLiteFleetRepository(FleetRepository):
         )
 
     @staticmethod
-    def _cg_to_domain(row: ClusterGroupRow) -> ClusterGroup:
+    def _ag_to_domain(row: AgentGroupRow) -> AgentGroup:
         ensure = SQLiteFleetRepository._ensure_utc
-        return ClusterGroup(
+        return AgentGroup(
             id=row.id,
             org_id=row.org_id,
             name=row.name,
             slug=row.slug,
             environment=row.environment,
             provider=row.provider,
+            execution_mode=ExecutionMode(row.execution_mode),
             created_at=ensure(row.created_at),
             updated_at=ensure(row.updated_at),
         )
@@ -372,7 +375,7 @@ class SQLiteFleetRepository(FleetRepository):
         ensure = SQLiteFleetRepository._ensure_utc
         return Agent(
             id=row.id,
-            cluster_group_id=row.cluster_group_id,
+            agent_group_id=row.agent_group_id,
             name=row.name,
             status=AgentStatus(row.status),
             current_job_id=row.current_job_id,
@@ -392,7 +395,7 @@ class SQLiteFleetRepository(FleetRepository):
                 session.add(row)
             row.org_id = mapping.org_id
             row.channel_id = mapping.channel_id
-            row.cluster_group_id = mapping.cluster_group_id
+            row.agent_group_id = mapping.agent_group_id
             row.mode = mapping.mode.value
             row.created_at = mapping.created_at
             row.updated_at = mapping.updated_at
@@ -483,7 +486,7 @@ class SQLiteFleetRepository(FleetRepository):
             if row is None:
                 row = PromptConfigRow(id=config.id)
                 session.add(row)
-            row.cluster_group_id = config.cluster_group_id
+            row.agent_group_id = config.agent_group_id
             row.system_prompt = config.system_prompt
             row.stack_manifest = config.stack_manifest
             row.persona = config.persona
@@ -498,11 +501,11 @@ class SQLiteFleetRepository(FleetRepository):
                 return None
             return self._prompt_to_domain(row)
 
-    def get_prompt_config_by_cluster(self, cluster_group_id: str) -> Optional[PromptConfig]:
+    def get_prompt_config_by_agent_group(self, agent_group_id: str) -> Optional[PromptConfig]:
         with self._session_factory() as session:
             row = (
                 session.query(PromptConfigRow)
-                .filter(PromptConfigRow.cluster_group_id == cluster_group_id)
+                .filter(PromptConfigRow.agent_group_id == agent_group_id)
                 .first()
             )
             if row is None:
@@ -527,7 +530,7 @@ class SQLiteFleetRepository(FleetRepository):
             id=row.id,
             org_id=row.org_id,
             channel_id=row.channel_id,
-            cluster_group_id=row.cluster_group_id,
+            agent_group_id=row.agent_group_id,
             mode=ChannelMode(row.mode),
             created_at=ensure(row.created_at),
             updated_at=ensure(row.updated_at),
@@ -551,7 +554,7 @@ class SQLiteFleetRepository(FleetRepository):
         ensure = SQLiteFleetRepository._ensure_utc
         return PromptConfig(
             id=row.id,
-            cluster_group_id=row.cluster_group_id,
+            agent_group_id=row.agent_group_id,
             system_prompt=row.system_prompt,
             stack_manifest=row.stack_manifest,
             persona=row.persona,

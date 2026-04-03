@@ -84,43 +84,44 @@ class TestOrganizations:
 
 
 # ---------------------------------------------------------------------------
-# ClusterGroups
+# AgentGroups
 # ---------------------------------------------------------------------------
 
-class TestClusterGroups:
+class TestAgentGroups:
     def _create_org(self, client):
         return client.post("/organizations/", json={"name": "Acme", "slug": "acme"}).json()
 
     def test_create(self, client):
         org = self._create_org(client)
-        resp = client.post("/cluster-groups/", json={
+        resp = client.post("/agent-groups/", json={
             "org_id": org["id"], "name": "Prod", "slug": "prod",
             "environment": "production", "provider": "eks",
         })
         assert resp.status_code == 201
         assert resp.json()["name"] == "Prod"
+        assert resp.json()["execution_mode"] == "READ_ONLY"
 
     def test_list_by_org(self, client):
         org = self._create_org(client)
-        client.post("/cluster-groups/", json={
+        client.post("/agent-groups/", json={
             "org_id": org["id"], "name": "Prod", "slug": "prod",
             "environment": "production", "provider": "eks",
         })
-        resp = client.get(f"/cluster-groups/?org_id={org['id']}")
+        resp = client.get(f"/agent-groups/?org_id={org['id']}")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     def test_get(self, client):
         org = self._create_org(client)
-        created = client.post("/cluster-groups/", json={
+        created = client.post("/agent-groups/", json={
             "org_id": org["id"], "name": "Prod", "slug": "prod",
             "environment": "production", "provider": "eks",
         }).json()
-        resp = client.get(f"/cluster-groups/{created['id']}")
+        resp = client.get(f"/agent-groups/{created['id']}")
         assert resp.status_code == 200
 
     def test_get_not_found(self, client):
-        resp = client.get("/cluster-groups/nonexistent")
+        resp = client.get("/agent-groups/nonexistent")
         assert resp.status_code == 404
 
 
@@ -130,14 +131,14 @@ class TestClusterGroups:
 
 class TestAgents:
     def test_list(self, client, fleet_repo):
-        agent = Agent(cluster_group_id="cg-1", name="agent-01")
+        agent = Agent(agent_group_id="ag-1", name="agent-01")
         fleet_repo.save_agent(agent)
-        resp = client.get("/agents/?cluster_group_id=cg-1")
+        resp = client.get("/agents/?agent_group_id=ag-1")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     def test_get(self, client, fleet_repo):
-        agent = Agent(cluster_group_id="cg-1", name="agent-01")
+        agent = Agent(agent_group_id="ag-1", name="agent-01")
         fleet_repo.save_agent(agent)
         resp = client.get(f"/agents/{agent.id}")
         assert resp.status_code == 200
@@ -156,14 +157,14 @@ class TestChannelMappings:
     def test_create(self, client):
         resp = client.post("/channel-mappings/", json={
             "org_id": "org-1", "channel_id": "C123",
-            "cluster_group_id": "cg-1", "mode": "ALERT",
+            "agent_group_id": "ag-1", "mode": "ALERT",
         })
         assert resp.status_code == 201
         assert resp.json()["channel_id"] == "C123"
 
     def test_list(self, client):
         client.post("/channel-mappings/", json={
-            "org_id": "org-1", "channel_id": "C123", "cluster_group_id": "cg-1",
+            "org_id": "org-1", "channel_id": "C123", "agent_group_id": "ag-1",
         })
         resp = client.get("/channel-mappings/?org_id=org-1")
         assert resp.status_code == 200
@@ -171,14 +172,14 @@ class TestChannelMappings:
 
     def test_get(self, client):
         created = client.post("/channel-mappings/", json={
-            "org_id": "org-1", "channel_id": "C123", "cluster_group_id": "cg-1",
+            "org_id": "org-1", "channel_id": "C123", "agent_group_id": "ag-1",
         }).json()
         resp = client.get(f"/channel-mappings/{created['id']}")
         assert resp.status_code == 200
 
     def test_delete(self, client):
         created = client.post("/channel-mappings/", json={
-            "org_id": "org-1", "channel_id": "C123", "cluster_group_id": "cg-1",
+            "org_id": "org-1", "channel_id": "C123", "agent_group_id": "ag-1",
         }).json()
         resp = client.delete(f"/channel-mappings/{created['id']}")
         assert resp.status_code == 204
@@ -235,21 +236,21 @@ class TestFilterRules:
 
 class TestPromptConfigs:
     def test_upsert_create(self, client):
-        resp = client.put("/prompt-configs/cg-1", json={
+        resp = client.put("/prompt-configs/ag-1", json={
             "system_prompt": "You are an SRE.", "persona": "k8s expert",
         })
         assert resp.status_code == 200
         assert resp.json()["system_prompt"] == "You are an SRE."
 
     def test_upsert_update(self, client):
-        client.put("/prompt-configs/cg-1", json={"system_prompt": "v1"})
-        resp = client.put("/prompt-configs/cg-1", json={"system_prompt": "v2"})
+        client.put("/prompt-configs/ag-1", json={"system_prompt": "v1"})
+        resp = client.put("/prompt-configs/ag-1", json={"system_prompt": "v2"})
         assert resp.status_code == 200
         assert resp.json()["system_prompt"] == "v2"
 
     def test_get(self, client):
-        client.put("/prompt-configs/cg-1", json={"system_prompt": "hello"})
-        resp = client.get("/prompt-configs/cg-1")
+        client.put("/prompt-configs/ag-1", json={"system_prompt": "hello"})
+        resp = client.get("/prompt-configs/ag-1")
         assert resp.status_code == 200
         assert resp.json()["system_prompt"] == "hello"
 
@@ -264,14 +265,14 @@ class TestPromptConfigs:
 
 class TestJobs:
     def test_list(self, client, job_repo):
-        job = Job(org_id="org-1", cluster_group_id="cg-1", type=JobType.TRIAGE, payload="alert")
+        job = Job(org_id="org-1", agent_group_id="ag-1", type=JobType.TRIAGE, payload="alert")
         job_repo.save(job)
-        resp = client.get("/jobs/?cluster_group_id=cg-1")
+        resp = client.get("/jobs/?agent_group_id=ag-1")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     def test_get(self, client, job_repo):
-        job = Job(org_id="org-1", cluster_group_id="cg-1", type=JobType.TRIAGE, payload="alert")
+        job = Job(org_id="org-1", agent_group_id="ag-1", type=JobType.TRIAGE, payload="alert")
         job_repo.save(job)
         resp = client.get(f"/jobs/{job.id}")
         assert resp.status_code == 200
@@ -288,27 +289,27 @@ class TestJobs:
 class TestSessions:
     def test_create(self, client):
         resp = client.post("/sessions/", json={
-            "org_id": "org-1", "cluster_group_id": "cg-1",
+            "org_id": "org-1", "agent_group_id": "ag-1",
         })
         assert resp.status_code == 201
         assert resp.json()["status"] == "ACTIVE"
 
     def test_list(self, client):
-        client.post("/sessions/", json={"org_id": "org-1", "cluster_group_id": "cg-1"})
-        resp = client.get("/sessions/?cluster_group_id=cg-1")
+        client.post("/sessions/", json={"org_id": "org-1", "agent_group_id": "ag-1"})
+        resp = client.get("/sessions/?agent_group_id=ag-1")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     def test_get(self, client):
         created = client.post("/sessions/", json={
-            "org_id": "org-1", "cluster_group_id": "cg-1",
+            "org_id": "org-1", "agent_group_id": "ag-1",
         }).json()
         resp = client.get(f"/sessions/{created['id']}")
         assert resp.status_code == 200
 
     def test_send_message(self, client):
         session = client.post("/sessions/", json={
-            "org_id": "org-1", "cluster_group_id": "cg-1",
+            "org_id": "org-1", "agent_group_id": "ag-1",
         }).json()
         resp = client.post(
             f"/sessions/{session['id']}/messages",

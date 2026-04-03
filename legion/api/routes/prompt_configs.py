@@ -14,13 +14,13 @@ from legion.services.fleet_repository import FleetRepository
 router = APIRouter(prefix="/prompt-configs", tags=["prompt-configs"])
 
 
-@router.put("/{cluster_group_id}")
+@router.put("/{agent_group_id}")
 def upsert_prompt_config(
-    cluster_group_id: str,
+    agent_group_id: str,
     body: PromptConfigUpsert,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
 ) -> PromptConfig:
-    existing = fleet_repo.get_prompt_config_by_cluster(cluster_group_id)
+    existing = fleet_repo.get_prompt_config_by_agent_group(agent_group_id)
     if existing is not None:
         existing.system_prompt = body.system_prompt
         existing.stack_manifest = body.stack_manifest
@@ -30,7 +30,7 @@ def upsert_prompt_config(
         return existing
 
     config = PromptConfig(
-        cluster_group_id=cluster_group_id,
+        agent_group_id=agent_group_id,
         system_prompt=body.system_prompt,
         stack_manifest=body.stack_manifest,
         persona=body.persona,
@@ -39,12 +39,12 @@ def upsert_prompt_config(
     return config
 
 
-@router.get("/{cluster_group_id}")
+@router.get("/{agent_group_id}")
 def get_prompt_config(
-    cluster_group_id: str,
+    agent_group_id: str,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
 ) -> PromptConfig:
-    config = fleet_repo.get_prompt_config_by_cluster(cluster_group_id)
+    config = fleet_repo.get_prompt_config_by_agent_group(agent_group_id)
     if config is None:
         raise HTTPException(status_code=404, detail="PromptConfig not found")
     return config

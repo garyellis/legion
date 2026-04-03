@@ -14,7 +14,7 @@ from legion.api.errors import register_error_handlers
 from legion.api.routes import (
     agents,
     channel_mappings,
-    cluster_groups,
+    agent_groups,
     filter_rules,
     health,
     jobs,
@@ -99,7 +99,7 @@ def create_app(
 
     app.include_router(health.router)
     app.include_router(organizations.router)
-    app.include_router(cluster_groups.router)
+    app.include_router(agent_groups.router)
     app.include_router(agents.router)
     app.include_router(channel_mappings.router)
     app.include_router(filter_rules.router)

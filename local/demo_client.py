@@ -15,16 +15,16 @@ def main() -> None:
     org = c.post("/organizations/", json={"name": "Acme", "slug": "acme"}).json()
     print(f"Org created:          {org['id']}  ({org['name']})")
 
-    # 2. ClusterGroup
-    cg = c.post("/cluster-groups/", json={
+    # 2. AgentGroup
+    ag = c.post("/agent-groups/", json={
         "org_id": org["id"], "name": "Production", "slug": "prod",
         "environment": "prod", "provider": "eks",
     }).json()
-    print(f"ClusterGroup created: {cg['id']}  ({cg['name']})")
+    print(f"AgentGroup created:   {ag['id']}  ({ag['name']})")
 
     # 3. ChannelMapping (optional but shows CRUD)
     cm = c.post("/channel-mappings/", json={
-        "org_id": org["id"], "channel_id": "C-DEMO", "cluster_group_id": cg["id"],
+        "org_id": org["id"], "channel_id": "C-DEMO", "agent_group_id": ag["id"],
     }).json()
     print(f"ChannelMapping:       {cm['id']}  (channel={cm['channel_id']})")
 
@@ -35,20 +35,20 @@ def main() -> None:
     print(f"FilterRule:           {fr['id']}  (pattern={fr['pattern']})")
 
     # 5. PromptConfig
-    pc = c.put(f"/prompt-configs/{cg['id']}", json={
+    pc = c.put(f"/prompt-configs/{ag['id']}", json={
         "system_prompt": "You are an SRE expert.", "persona": "K8s Guru",
     }).json()
     print(f"PromptConfig:         {pc['id']}  (persona={pc['persona']})")
 
     # 6. Check agents
-    agents = c.get(f"/agents/?cluster_group_id={cg['id']}").json()
-    print(f"\nAgents in cluster group: {len(agents)}")
+    agents = c.get(f"/agents/?agent_group_id={ag['id']}").json()
+    print(f"\nAgents in agent group: {len(agents)}")
     if not agents:
         print("  (none yet — start demo_agent.py in another terminal)")
 
     # 7. Session + message
     session = c.post("/sessions/", json={
-        "org_id": org["id"], "cluster_group_id": cg["id"],
+        "org_id": org["id"], "agent_group_id": ag["id"],
     }).json()
     print(f"\nSession created:      {session['id']}")
 

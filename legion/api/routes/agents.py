@@ -13,10 +13,10 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 @router.get("/")
 def list_agents(
-    cluster_group_id: str,
+    agent_group_id: str,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
 ) -> list[Agent]:
-    return fleet_repo.list_agents(cluster_group_id)
+    return fleet_repo.list_agents(agent_group_id)
 
 
 @router.get("/{agent_id}")

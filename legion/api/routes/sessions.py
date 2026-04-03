@@ -21,7 +21,7 @@ def create_session(
 ) -> Session:
     session = Session(
         org_id=body.org_id,
-        cluster_group_id=body.cluster_group_id,
+        agent_group_id=body.agent_group_id,
     )
     session_repo.save(session)
     return session
@@ -29,10 +29,10 @@ def create_session(
 
 @router.get("/")
 def list_sessions(
-    cluster_group_id: str,
+    agent_group_id: str,
     session_repo: SessionRepository = Depends(get_session_repo),
 ) -> list[Session]:
-    return session_repo.list_active(cluster_group_id)
+    return session_repo.list_active(agent_group_id)
 
 
 @router.get("/{session_id}")
@@ -61,9 +61,9 @@ async def send_message(
         raise HTTPException(status_code=422, detail="Session is not active")
 
     job = dispatch_service.create_job(
-        session.org_id, session.cluster_group_id, JobType.QUERY, body.payload,
+        session.org_id, session.agent_group_id, JobType.QUERY, body.payload,
     )
-    dispatched = dispatch_service.dispatch_pending(session.cluster_group_id)
+    dispatched = dispatch_service.dispatch_pending(session.agent_group_id)
 
     connection_manager = request.app.state.connection_manager
     for d_job, d_agent in dispatched:

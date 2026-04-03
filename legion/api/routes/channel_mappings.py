@@ -20,7 +20,7 @@ def create_channel_mapping(
     mapping = ChannelMapping(
         org_id=body.org_id,
         channel_id=body.channel_id,
-        cluster_group_id=body.cluster_group_id,
+        agent_group_id=body.agent_group_id,
         mode=body.mode,
     )
     fleet_repo.save_channel_mapping(mapping)

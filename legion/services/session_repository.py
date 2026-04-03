@@ -33,7 +33,7 @@ class SessionRepository(ABC):
     ) -> Optional[Session]: ...
 
     @abstractmethod
-    def list_active(self, cluster_group_id: str | None = None) -> list[Session]: ...
+    def list_active(self, agent_group_id: str | None = None) -> list[Session]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ class SessionRow(Base):
 
     id = Column(String, primary_key=True)
     org_id = Column(String, nullable=False)
-    cluster_group_id = Column(String, nullable=False)
+    agent_group_id = Column(String, nullable=False)
     agent_id = Column(String, nullable=True)
     slack_channel_id = Column(String, nullable=True)
     slack_thread_ts = Column(String, nullable=True)
@@ -70,7 +70,7 @@ class SQLiteSessionRepository(SessionRepository):
                 row = SessionRow(id=session.id)
                 db.add(row)
             row.org_id = session.org_id
-            row.cluster_group_id = session.cluster_group_id
+            row.agent_group_id = session.agent_group_id
             row.agent_id = session.agent_id
             row.slack_channel_id = session.slack_channel_id
             row.slack_thread_ts = session.slack_thread_ts
@@ -103,13 +103,13 @@ class SQLiteSessionRepository(SessionRepository):
                 return None
             return self._to_domain(row)
 
-    def list_active(self, cluster_group_id: str | None = None) -> list[Session]:
+    def list_active(self, agent_group_id: str | None = None) -> list[Session]:
         with self._session_factory() as db:
             q = db.query(SessionRow).filter(
                 SessionRow.status == SessionStatus.ACTIVE.value
             )
-            if cluster_group_id is not None:
-                q = q.filter(SessionRow.cluster_group_id == cluster_group_id)
+            if agent_group_id is not None:
+                q = q.filter(SessionRow.agent_group_id == agent_group_id)
             return [self._to_domain(r) for r in q.all()]
 
     @staticmethod
@@ -124,7 +124,7 @@ class SQLiteSessionRepository(SessionRepository):
         return Session(
             id=row.id,
             org_id=row.org_id,
-            cluster_group_id=row.cluster_group_id,
+            agent_group_id=row.agent_group_id,
             agent_id=row.agent_id,
             slack_channel_id=row.slack_channel_id,
             slack_thread_ts=row.slack_thread_ts,

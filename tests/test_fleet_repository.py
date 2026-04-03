@@ -3,8 +3,8 @@
 import pytest
 
 from legion.domain.agent import Agent, AgentStatus
+from legion.domain.agent_group import AgentGroup, ExecutionMode
 from legion.domain.channel_mapping import ChannelMapping, ChannelMode
-from legion.domain.cluster_group import ClusterGroup
 from legion.domain.filter_rule import FilterAction, FilterRule
 from legion.domain.organization import Organization
 from legion.domain.prompt_config import PromptConfig
@@ -44,51 +44,63 @@ class TestOrganizationContract:
         assert repo.delete_org(org.id) is False
 
 
-class TestClusterGroupContract:
+class TestAgentGroupContract:
     def test_save_and_get(self, repo):
-        cg = ClusterGroup(
+        ag = AgentGroup(
             org_id="org-1", name="US West", slug="us-west",
             environment="prod", provider="eks",
         )
-        repo.save_cluster_group(cg)
-        loaded = repo.get_cluster_group(cg.id)
+        repo.save_agent_group(ag)
+        loaded = repo.get_agent_group(ag.id)
         assert loaded is not None
         assert loaded.name == "US West"
         assert loaded.environment == "prod"
+        assert loaded.execution_mode == ExecutionMode.READ_ONLY
 
     def test_list_by_org(self, repo):
-        cg1 = ClusterGroup(
+        ag1 = AgentGroup(
             org_id="org-1", name="A", slug="a",
             environment="dev", provider="aks",
         )
-        cg2 = ClusterGroup(
+        ag2 = AgentGroup(
             org_id="org-1", name="B", slug="b",
             environment="staging", provider="gke",
         )
-        cg3 = ClusterGroup(
+        ag3 = AgentGroup(
             org_id="org-2", name="C", slug="c",
             environment="prod", provider="eks",
         )
-        repo.save_cluster_group(cg1)
-        repo.save_cluster_group(cg2)
-        repo.save_cluster_group(cg3)
-        result = repo.list_cluster_groups("org-1")
+        repo.save_agent_group(ag1)
+        repo.save_agent_group(ag2)
+        repo.save_agent_group(ag3)
+        result = repo.list_agent_groups("org-1")
         assert len(result) == 2
 
     def test_delete(self, repo):
-        cg = ClusterGroup(
+        ag = AgentGroup(
             org_id="org-1", name="X", slug="x",
             environment="dev", provider="aks",
         )
-        repo.save_cluster_group(cg)
-        assert repo.delete_cluster_group(cg.id) is True
-        assert repo.get_cluster_group(cg.id) is None
+        repo.save_agent_group(ag)
+        assert repo.delete_agent_group(ag.id) is True
+        assert repo.get_agent_group(ag.id) is None
+
+    def test_execution_mode_persists(self, repo):
+        ag = AgentGroup(
+            org_id="org-1", name="Dev", slug="dev",
+            environment="dev", provider="aks",
+            execution_mode=ExecutionMode.AUTO_EXECUTE,
+        )
+        repo.save_agent_group(ag)
+        loaded = repo.get_agent_group(ag.id)
+        assert loaded is not None
+        assert loaded.execution_mode == ExecutionMode.AUTO_EXECUTE
 
 
 class TestAgentContract:
     def test_save_and_get(self, repo):
         agent = Agent(
-            cluster_group_id="cg-1", name="agent-01",
+            agent_group_id="ag-1", name="agent-01",
             capabilities=["k8s", "logs"],
         )
         repo.save_agent(agent)
@@ -97,37 +109,37 @@ class TestAgentContract:
         assert loaded.name == "agent-01"
         assert loaded.capabilities == ["k8s", "logs"]
 
-    def test_list_by_cluster(self, repo):
-        a1 = Agent(cluster_group_id="cg-1", name="a1")
-        a2 = Agent(cluster_group_id="cg-1", name="a2")
-        a3 = Agent(cluster_group_id="cg-2", name="a3")
+    def test_list_by_agent_group(self, repo):
+        a1 = Agent(agent_group_id="ag-1", name="a1")
+        a2 = Agent(agent_group_id="ag-1", name="a2")
+        a3 = Agent(agent_group_id="ag-2", name="a3")
         repo.save_agent(a1)
         repo.save_agent(a2)
         repo.save_agent(a3)
-        assert len(repo.list_agents("cg-1")) == 2
+        assert len(repo.list_agents("ag-1")) == 2
 
     def test_list_idle_filters(self, repo):
-        idle = Agent(cluster_group_id="cg-1", name="idle")
+        idle = Agent(agent_group_id="ag-1", name="idle")
         idle.go_idle()
-        busy = Agent(cluster_group_id="cg-1", name="busy")
+        busy = Agent(agent_group_id="ag-1", name="busy")
         busy.go_idle()
         busy.go_busy("job-1")
-        offline = Agent(cluster_group_id="cg-1", name="offline")
+        offline = Agent(agent_group_id="ag-1", name="offline")
         repo.save_agent(idle)
         repo.save_agent(busy)
         repo.save_agent(offline)
-        result = repo.list_idle_agents("cg-1")
+        result = repo.list_idle_agents("ag-1")
         assert len(result) == 1
         assert result[0].name == "idle"
 
     def test_delete(self, repo):
-        agent = Agent(cluster_group_id="cg-1", name="x")
+        agent = Agent(agent_group_id="ag-1", name="x")
         repo.save_agent(agent)
         assert repo.delete_agent(agent.id) is True
         assert repo.get_agent(agent.id) is None
 
     def test_update_persists(self, repo):
-        agent = Agent(cluster_group_id="cg-1", name="a")
+        agent = Agent(agent_group_id="ag-1", name="a")
         repo.save_agent(agent)
         agent.go_idle()
         repo.save_agent(agent)
@@ -139,7 +151,7 @@ class TestAgentContract:
 class TestChannelMappingContract:
     def test_save_and_get(self, repo):
         m = ChannelMapping(
-            org_id="org-1", channel_id="C123", cluster_group_id="cg-1",
+            org_id="org-1", channel_id="C123", agent_group_id="ag-1",
         )
         repo.save_channel_mapping(m)
         loaded = repo.get_channel_mapping(m.id)
@@ -149,7 +161,7 @@ class TestChannelMappingContract:
 
     def test_get_by_channel(self, repo):
         m = ChannelMapping(
-            org_id="org-1", channel_id="C456", cluster_group_id="cg-1",
+            org_id="org-1", channel_id="C456", agent_group_id="ag-1",
         )
         repo.save_channel_mapping(m)
         loaded = repo.get_channel_mapping_by_channel("C456")
@@ -161,13 +173,13 @@ class TestChannelMappingContract:
 
     def test_list_by_org(self, repo):
         m1 = ChannelMapping(
-            org_id="org-1", channel_id="C1", cluster_group_id="cg-1",
+            org_id="org-1", channel_id="C1", agent_group_id="ag-1",
         )
         m2 = ChannelMapping(
-            org_id="org-1", channel_id="C2", cluster_group_id="cg-2",
+            org_id="org-1", channel_id="C2", agent_group_id="ag-2",
         )
         m3 = ChannelMapping(
-            org_id="org-2", channel_id="C3", cluster_group_id="cg-3",
+            org_id="org-2", channel_id="C3", agent_group_id="ag-3",
         )
         repo.save_channel_mapping(m1)
         repo.save_channel_mapping(m2)
@@ -176,7 +188,7 @@ class TestChannelMappingContract:
 
     def test_delete(self, repo):
         m = ChannelMapping(
-            org_id="org-1", channel_id="C123", cluster_group_id="cg-1",
+            org_id="org-1", channel_id="C123", agent_group_id="ag-1",
         )
         repo.save_channel_mapping(m)
         assert repo.delete_channel_mapping(m.id) is True
@@ -216,7 +228,7 @@ class TestFilterRuleContract:
 class TestPromptConfigContract:
     def test_save_and_get(self, repo):
         pc = PromptConfig(
-            cluster_group_id="cg-1",
+            agent_group_id="ag-1",
             system_prompt="You are a K8s expert",
             stack_manifest="App → Redis → PG",
             persona="DBA",
@@ -227,25 +239,25 @@ class TestPromptConfigContract:
         assert loaded.system_prompt == "You are a K8s expert"
         assert loaded.persona == "DBA"
 
-    def test_get_by_cluster(self, repo):
-        pc = PromptConfig(cluster_group_id="cg-1", system_prompt="test")
+    def test_get_by_agent_group(self, repo):
+        pc = PromptConfig(agent_group_id="ag-1", system_prompt="test")
         repo.save_prompt_config(pc)
-        loaded = repo.get_prompt_config_by_cluster("cg-1")
+        loaded = repo.get_prompt_config_by_agent_group("ag-1")
         assert loaded is not None
         assert loaded.id == pc.id
 
-    def test_get_by_cluster_nonexistent(self, repo):
-        assert repo.get_prompt_config_by_cluster("cg-999") is None
+    def test_get_by_agent_group_nonexistent(self, repo):
+        assert repo.get_prompt_config_by_agent_group("ag-999") is None
 
     def test_delete(self, repo):
-        pc = PromptConfig(cluster_group_id="cg-1")
+        pc = PromptConfig(agent_group_id="ag-1")
         repo.save_prompt_config(pc)
         assert repo.delete_prompt_config(pc.id) is True
         assert repo.get_prompt_config(pc.id) is None
         assert repo.delete_prompt_config(pc.id) is False
 
     def test_update_existing(self, repo):
-        pc = PromptConfig(cluster_group_id="cg-1", system_prompt="v1")
+        pc = PromptConfig(agent_group_id="ag-1", system_prompt="v1")
         repo.save_prompt_config(pc)
         pc.system_prompt = "v2"
         repo.save_prompt_config(pc)

@@ -30,7 +30,7 @@ class Job(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     org_id: str
-    cluster_group_id: str
+    agent_group_id: str
     agent_id: str | None = None
     type: JobType
     status: JobStatus = JobStatus.PENDING

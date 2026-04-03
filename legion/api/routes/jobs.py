@@ -13,10 +13,10 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 @router.get("/")
 def list_jobs(
-    cluster_group_id: str,
+    agent_group_id: str,
     job_repo: JobRepository = Depends(get_job_repo),
 ) -> list[Job]:
-    return job_repo.list_active(cluster_group_id)
+    return job_repo.list_active(agent_group_id)
 
 
 @router.get("/{job_id}")

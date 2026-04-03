@@ -1,4 +1,4 @@
-"""Agent domain model — an SRE agent instance within a cluster group."""
+"""Agent domain model — an SRE agent instance within an agent group."""
 
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ class AgentStatus(str, Enum):
 
 
 class Agent(BaseModel):
-    """An SRE agent registered to a cluster group."""
+    """An SRE agent registered to an agent group."""
 
     model_config = {"validate_assignment": True}
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    cluster_group_id: str
+    agent_group_id: str
     name: str
     status: AgentStatus = AgentStatus.OFFLINE
     current_job_id: str | None = None

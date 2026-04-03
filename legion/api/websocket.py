@@ -66,7 +66,7 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
     agent = fleet_repo.get_agent(agent_id)
     if agent is None:
         agent = dispatch_service.register_agent(
-            cluster_group_id="default", name=agent_id,
+            agent_group_id="default", name=agent_id,
         )
         agent.id = agent_id
         fleet_repo.save_agent(agent)
@@ -97,7 +97,7 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
                 agent = fleet_repo.get_agent(agent_id)
                 if agent is not None:
                     dispatched = dispatch_service.dispatch_pending(
-                        agent.cluster_group_id,
+                        agent.agent_group_id,
                     )
                     for d_job, d_agent in dispatched:
                         await connection_manager.send_job_to_agent(d_job, d_agent)
@@ -108,7 +108,7 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
                 agent = fleet_repo.get_agent(agent_id)
                 if agent is not None:
                     dispatched = dispatch_service.dispatch_pending(
-                        agent.cluster_group_id,
+                        agent.agent_group_id,
                     )
                     for d_job, d_agent in dispatched:
                         await connection_manager.send_job_to_agent(d_job, d_agent)

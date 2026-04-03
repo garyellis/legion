@@ -54,7 +54,7 @@ def client(app):
 
 class TestAgentWebSocket:
     def test_connect_marks_idle(self, client, fleet_repo):
-        agent = Agent(cluster_group_id="cg-1", name="ws-agent", id="agent-ws-1")
+        agent = Agent(agent_group_id="ag-1", name="ws-agent", id="agent-ws-1")
         fleet_repo.save_agent(agent)
 
         with client.websocket_connect("/ws/agents/agent-ws-1"):
@@ -62,7 +62,7 @@ class TestAgentWebSocket:
             assert reloaded.status == AgentStatus.IDLE
 
     def test_heartbeat_updates_timestamp(self, client, fleet_repo):
-        agent = Agent(cluster_group_id="cg-1", name="ws-agent", id="agent-ws-2")
+        agent = Agent(agent_group_id="ag-1", name="ws-agent", id="agent-ws-2")
         fleet_repo.save_agent(agent)
 
         with client.websocket_connect("/ws/agents/agent-ws-2") as ws:
@@ -74,7 +74,7 @@ class TestAgentWebSocket:
         assert reloaded.last_heartbeat is not None
 
     def test_disconnect_marks_offline(self, client, fleet_repo):
-        agent = Agent(cluster_group_id="cg-1", name="ws-agent", id="agent-ws-3")
+        agent = Agent(agent_group_id="ag-1", name="ws-agent", id="agent-ws-3")
         fleet_repo.save_agent(agent)
 
         with client.websocket_connect("/ws/agents/agent-ws-3"):
@@ -85,13 +85,13 @@ class TestAgentWebSocket:
 
     def test_disconnect_reverts_dispatched_jobs(self, client, fleet_repo, job_repo):
         agent = Agent(
-            cluster_group_id="cg-1", name="ws-agent", id="agent-ws-4",
+            agent_group_id="ag-1", name="ws-agent", id="agent-ws-4",
             status=AgentStatus.IDLE,
         )
         fleet_repo.save_agent(agent)
 
         job = Job(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             type=JobType.TRIAGE, payload="alert",
             status=JobStatus.DISPATCHED, agent_id="agent-ws-4",
         )
@@ -106,13 +106,13 @@ class TestAgentWebSocket:
 
     def test_job_result_completes_job(self, client, fleet_repo, job_repo):
         agent = Agent(
-            cluster_group_id="cg-1", name="ws-agent", id="agent-ws-5",
+            agent_group_id="ag-1", name="ws-agent", id="agent-ws-5",
             status=AgentStatus.IDLE,
         )
         fleet_repo.save_agent(agent)
 
         job = Job(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             type=JobType.QUERY, payload="check pods",
             status=JobStatus.DISPATCHED, agent_id="agent-ws-5",
         )
@@ -131,13 +131,13 @@ class TestAgentWebSocket:
 
     def test_job_failed_marks_failed(self, client, fleet_repo, job_repo):
         agent = Agent(
-            cluster_group_id="cg-1", name="ws-agent", id="agent-ws-6",
+            agent_group_id="ag-1", name="ws-agent", id="agent-ws-6",
             status=AgentStatus.IDLE,
         )
         fleet_repo.save_agent(agent)
 
         job = Job(
-            org_id="org-1", cluster_group_id="cg-1",
+            org_id="org-1", agent_group_id="ag-1",
             type=JobType.QUERY, payload="check pods",
             status=JobStatus.DISPATCHED, agent_id="agent-ws-6",
         )

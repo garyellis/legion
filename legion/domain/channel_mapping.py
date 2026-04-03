@@ -1,4 +1,4 @@
-"""ChannelMapping domain model — links a Slack channel to a cluster group."""
+"""ChannelMapping domain model — links a Slack channel to an agent group."""
 
 from __future__ import annotations
 
@@ -15,14 +15,14 @@ class ChannelMode(str, Enum):
 
 
 class ChannelMapping(BaseModel):
-    """Maps a Slack channel to a cluster group with a processing mode."""
+    """Maps a Slack channel to an agent group with a processing mode."""
 
     model_config = {"validate_assignment": True}
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     org_id: str
     channel_id: str
-    cluster_group_id: str
+    agent_group_id: str
     mode: ChannelMode = ChannelMode.ALERT
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
