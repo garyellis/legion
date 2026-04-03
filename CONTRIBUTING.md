@@ -160,6 +160,46 @@ docker compose run --rm api uv run pytest  # run tests against PostgreSQL
 docker compose down -v                     # tear down and wipe data
 ```
 
+### Parallel Development with Worktrees
+
+We use [worktrunk](https://github.com/max-sixty/worktrunk) (`wt`) to manage parallel feature branches in isolated worktrees. Each feature gets its own directory — no stashing, no context switching.
+
+```bash
+wt switch -c feature/api-key-auth          # create worktree + branch
+wt list                                    # see active worktrees
+wt merge                                   # merge current branch to main + cleanup
+wt remove                                  # abandon a worktree
+```
+
+**Development loop** (per feature):
+
+```
+1. wt switch -c feature/<name>                  # isolate
+2. implement changes                             # code
+3. uv run pytest                                 # test
+4. uv run legion-cli architecture check          # gate
+5. /review                                       # subagent code review (see below)
+6. git add <files> && git commit                 # commit
+7. wt merge                                      # land on main
+```
+
+See `.claude/rules/worktrees.md` for AI agent coordination rules (which files are safe to parallelize, which require coordination).
+
+### Pre-Commit Code Review
+
+Before committing, run `/review` in Claude Code. This hands the diff to a fresh agent context that checks:
+
+- Layer violation (imports flowing upward)
+- Banned imports in `core/` (LangChain, Rich, Slack SDK, FastAPI)
+- Missing `from __future__ import annotations`
+- Common mistakes (formatting in services, loose dicts, Slack fields on domain models)
+- Test coverage for new modules
+- Security concerns (credentials, eval/exec, unsanitized input)
+
+The review outputs a structured PASS/FAIL. Address findings before committing.
+
+For AI agents: the implementing agent should spawn a subagent with a fresh context to perform the review, avoiding the bias of reviewing your own work.
+
 ---
 
 ## Adding a New Core Domain
