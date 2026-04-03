@@ -16,3 +16,4 @@ class APIConfig(LegionConfig):
     port: int = 8000
     log_level: str = "INFO"
     log_format: str = "JSON"
+    api_key: str = ""

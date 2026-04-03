@@ -27,8 +27,8 @@ from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
 from legion.services.dispatch_service import DispatchService
 from legion.services.filter_service import FilterService
 from legion.services.fleet_repository import FleetRepository
-from legion.services.job_repository import InMemoryJobRepository, JobRepository
-from legion.services.session_repository import InMemorySessionRepository, SessionRepository
+from legion.services.job_repository import JobRepository
+from legion.services.session_repository import SessionRepository
 from legion.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ def create_app(
     fleet_repo: FleetRepository | None = None,
     job_repo: JobRepository | None = None,
     session_repo: SessionRepository | None = None,
+    api_key: str = "",
 ) -> FastAPI:
     """App factory. Pass repos for testing; defaults to SQLite."""
 
@@ -67,13 +68,8 @@ def create_app(
 
         if job_repo is not None:
             app.state.job_repo = job_repo
-        elif not hasattr(app.state, "job_repo"):
-            app.state.job_repo = InMemoryJobRepository()
-
         if session_repo is not None:
             app.state.session_repo = session_repo
-        elif not hasattr(app.state, "session_repo"):
-            app.state.session_repo = InMemorySessionRepository()
 
         # Services
         app.state.dispatch_service = DispatchService(
@@ -93,6 +89,11 @@ def create_app(
         logger.info("API stopped")
 
     app = FastAPI(title="Legion API", lifespan=lifespan)
+
+    if api_key:
+        from legion.api.middleware import APIKeyMiddleware
+
+        app.add_middleware(APIKeyMiddleware, api_key=api_key)
 
     register_error_handlers(app)
 
@@ -119,7 +120,7 @@ def main() -> None:
         fmt=LogFormat[api_config.log_format],
         quiet_loggers=["uvicorn", "uvicorn.access"],
     )
-    app = create_app()
+    app = create_app(api_key=api_config.api_key)
     uvicorn.run(app, host=api_config.host, port=api_config.port)
 
 
