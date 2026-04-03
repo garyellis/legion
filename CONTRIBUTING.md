@@ -162,16 +162,16 @@ docker compose down -v                     # tear down and wipe data
 
 ### Parallel Development with Worktrees
 
-We use [worktrunk](https://github.com/max-sixty/worktrunk) (`wt`) to manage parallel feature branches in isolated worktrees. Each feature gets its own directory — no stashing, no context switching.
+We use [worktrunk](https://worktrunk.dev/) (`wt`) to manage parallel feature branches in isolated worktrees. Each feature gets its own directory — no stashing, no context switching.
 
 ```bash
 wt switch -c feature/api-key-auth          # create worktree + branch
 wt list                                    # see active worktrees
-wt merge                                   # merge current branch to main + cleanup
+wt merge main                              # merge current branch to main + cleanup
 wt remove                                  # abandon a worktree
 ```
 
-**Development loop** (per feature):
+**Manual development loop** (per feature):
 
 ```
 1. wt switch -c feature/<name>                  # isolate
@@ -180,10 +180,126 @@ wt remove                                  # abandon a worktree
 4. uv run legion-cli architecture check          # gate
 5. /review                                       # subagent code review (see below)
 6. git add <files> && git commit                 # commit
-7. wt merge                                      # land on main
+7. wt merge main                                 # land on main
 ```
 
 See `.claude/rules/worktrees.md` for AI agent coordination rules (which files are safe to parallelize, which require coordination).
+
+### Claude + Worktrees
+
+The `-x claude` flag launches Claude Code inside an isolated worktree. It works autonomously on the task while you do other things.
+
+Every prompt should end with a **quality gate** — tell Claude to test, review, and open a PR:
+
+```
+After implementation:
+1. Run uv run pytest
+2. Run uv run legion-cli architecture check
+3. Run /review and fix any findings
+4. Repeat steps 1-3 up to 3 passes until clean
+5. Commit and push the branch
+6. Run gh pr create with a summary of changes
+```
+
+Two or three passes is enough for most work. Bump to four for cross-cutting changes.
+
+**Examples:**
+
+```bash
+# Feature work — Claude implements, tests, reviews, and opens a PR
+wt switch -x claude -c feature/health-endpoints -- \
+  'Add liveness and readiness endpoints to the API.
+
+- GET /health returns 200 with {"status": "ok"}
+- GET /health/ready checks DB connectivity, returns 503 if unreachable
+- Both endpoints skip API key auth middleware
+- Add tests for healthy and degraded DB scenarios
+
+After implementation:
+1. Run uv run pytest
+2. Run uv run legion-cli architecture check
+3. Run /review and fix any findings
+4. Repeat 1-3 up to 3 passes until clean
+5. Commit and push
+6. Run gh pr create with a summary'
+```
+
+```bash
+# Read-only investigation — no edits, just analysis
+wt switch -x 'claude --read-only' -c investigate/flaky-tests -- \
+  'test_dispatch_service.py::test_reassign_disconnected is flaky — passes
+locally, fails ~30% in CI. Find the root cause. Check for timing issues,
+shared state, and async races. Report findings with line numbers and a
+suggested fix. Do not edit files.'
+```
+
+**Parallel agents** — run each in a separate terminal:
+
+```bash
+# Terminal 1 — telemetry (touches plumbing/ and api/)
+wt switch -x claude -c feature/telemetry -- \
+  'Add observability to the plumbing layer.
+
+- plumbing/telemetry.py: Prometheus counters, histograms, gauges + OpenTelemetry
+  tracer. No-ops when disabled. No SDK init or background threads when off.
+- plumbing/plugins.py: @tool decorator for metadata (name, description, category,
+  read_only). No AI framework imports.
+- /metrics endpoint on the API (Prometheus scrape target)
+- Instrument DispatchService and SessionService with intentional metrics
+  (jobs_dispatched_total, job_duration_seconds — not auto-instrumented noise)
+- Unit tests for telemetry helpers and the plugin decorator
+
+After implementation:
+1. Run uv run pytest
+2. Run uv run legion-cli architecture check
+3. Run /review and fix any findings
+4. Repeat 1-3 up to 3 passes until clean
+5. Commit and push
+6. Run gh pr create with a summary'
+
+# Terminal 2 — migrations (touches alembic/ and app startup)
+wt switch -x claude -c feature/alembic -- \
+  'Set up Alembic for database migrations.
+
+- alembic init, configure env.py against legion/plumbing/database.py models
+- Autogenerate initial migration from the existing ORM schema
+- Wire alembic upgrade head into app startup (production + dev-with-file-DB)
+- Keep create_all() for test fixtures (sqlite:///:memory: skips migrations)
+- Add ADR in docs/decisionlog/ for the alembic dependency
+
+After implementation:
+1. Run uv run pytest
+2. Run uv run legion-cli architecture check
+3. Run /review and fix any findings
+4. Repeat 1-3 up to 3 passes until clean
+5. Commit and push
+6. Run gh pr create with a summary'
+```
+
+**Monitoring:**
+
+```bash
+wt list
+# Branch               Status   Path                          ...
+# @ main                   ^    .
+# + feature/telemetry  ↑ 🤖     ../legion.feature-telemetry       # working
+# + feature/alembic    ↑ 💬     ../legion.feature-alembic         # waiting for input
+```
+
+**Landing changes:**
+
+```bash
+# If Claude already pushed and opened a PR, just review it on GitHub.
+
+# To merge directly (small, low-risk changes):
+wt switch feature/telemetry
+wt merge main                      # rebase, merge, clean up worktree
+
+# To clean up after a merged PR:
+wt remove feature/alembic
+```
+
+**Parallelization safety:** Surfaces (`cli/`, `slack/`, `api/`) and independent core modules (`core/kubernetes/`, `core/database/`) are safe to work on in parallel. Don't let two worktrees touch the same service or domain file. See `.claude/rules/worktrees.md`.
 
 ### Pre-Commit Code Review
 
