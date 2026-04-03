@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running pre-commit checks..."
+
+# Gate checks — block commit on failure
+echo "  [gate] Architecture check (dependency direction + banned imports + dangerous calls)..."
+uv run legion-cli architecture check || exit 1
+
+echo "  [gate] Sensitive file detection..."
+uv run legion-cli architecture secrets-check || exit 1
+
+# Advisory checks — warn but don't block
+echo "  [advisory] Security scan (bandit)..."
+uv run legion-cli architecture security || true
+
+echo ""
+echo "Pre-commit checks passed."
