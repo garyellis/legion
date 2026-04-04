@@ -1,4 +1,4 @@
-# CLAUDE.md — Legion Project Guidelines
+# AGENTS.md — Legion Project Guidelines
 
 ## Project Overview
 
@@ -130,3 +130,40 @@ tests/
 | `legion/plumbing/database.py` | SQLAlchemy `Base` and engine setup |
 | `CONTRIBUTING.md` | Full architectural rationale and decision tree |
 | `docs/decisionlog/` | ADRs for dependency and architectural decisions |
+
+## Pre-Commit Review Checklist
+
+Before committing, verify the diff against these checks:
+
+### Architecture — Layer Violations
+Every file lives in a layer. Imports must flow downward only (see layer model above). Flag any import that violates this direction.
+
+### Architecture — Banned Imports in core/
+`core/` must NEVER import: `langchain`, `rich`, `slack_sdk`, `slack_bolt`, `fastapi`, `starlette`.
+
+### Code Quality
+- Every `.py` file must have `from __future__ import annotations` at the top.
+- No loose `dict` for structured data — use Pydantic models or dataclasses.
+- No formatting logic in `services/` — services return models, surfaces format.
+- No Slack-specific fields (`channel_id`, `message_ts`) on domain models.
+- No `eval()`, `exec()`, or `pickle.loads()` on untrusted data.
+- No credentials, API keys, or secrets hardcoded in source.
+
+### Test Coverage
+- If a new module is added, a corresponding test file must exist.
+- If an existing module is modified, existing tests must still cover the changed behavior.
+
+### Error Handling
+- New exceptions should inherit from `LegionError` (plumbing) or `ServiceError` (services).
+- No bare `except:` or `except Exception:` without re-raising or logging.
+
+## Quality Gate
+
+Before committing, always run:
+
+```bash
+uv run pytest
+uv run legion-cli architecture check
+```
+
+Fix all failures before committing.
