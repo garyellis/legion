@@ -4,6 +4,8 @@
 
 This project uses git worktrees for parallel development. Multiple agents may work simultaneously on independent features.
 
+`cli_dev/` is the dedicated developer harness surface behind `legion-dev`. Treat it as a surface-level entry point for repo tooling, not as product runtime code.
+
 ## Feature Intake Default
 
 For non-trivial feature requests, use the `legion-dev feature create` workflow by default before implementation or delegation.

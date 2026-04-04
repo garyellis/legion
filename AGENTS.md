@@ -20,7 +20,7 @@ agents/      → imports plumbing/, core/, domain/, services/
 surfaces     → import from any layer below, never from each other
 ```
 
-Surfaces: `cli/`, `slack/`, `api/`, `tui/`. Each is an independent entry point.
+Surfaces: `cli/`, `cli_dev/`, `slack/`, `api/`, `tui/`. Each is an independent entry point. `cli_dev/` is the developer harness surface behind the `legion-dev` command, not an end-user runtime surface.
 
 ## Do NOT
 

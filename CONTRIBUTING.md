@@ -67,10 +67,12 @@ Is the data structure 1:1 with an API response?
   -> Stays in core/ as a model.
 
 Does it parse input or format output for a specific medium?
-  -> Surface layer (cli/, slack/, api/).
+  -> Surface layer (cli/, cli_dev/, slack/, api/).
 ```
 
 Not every command needs a service. If a CLI command wraps one core function, call `core/` directly from the surface.
+
+`cli_dev/` is the developer harness surface. Put development-only commands there: architecture gates, ADR helpers, review tooling, scaffolding, and feature handoff workflows.
 
 ---
 

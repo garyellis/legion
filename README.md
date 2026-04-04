@@ -9,6 +9,7 @@ What works today and what's on the roadmap.
 | Component | Status | Description |
 |:----------|:-------|:------------|
 | CLI (`legion-cli`) | Working | Typer-based CLI with architecture enforcement, lab operations |
+| Developer CLI (`legion-dev`) | Working | Internal development harness for architecture gates, ADRs, review, scaffolding, and feature handoff briefs |
 | Slack bot (`legion-slack`) | Working | Slack Bolt integration with incident management, slash commands |
 | REST API (`legion-api`) | Working | FastAPI surface with CRUD routes, WebSocket scaffolding |
 | OpenStack adapter | Working | VM lifecycle, compute management, batch orchestration |
@@ -40,9 +41,12 @@ Surfaces (independent entry points, never import each other):
 
 ```
 cli/         Typer CLI          → legion-cli
+cli_dev/     Developer harness  → legion-dev
 slack/       Slack Bolt bot     → legion-slack
 api/         FastAPI REST API   → legion-api
 ```
+
+`cli_dev/` is the internal development harness surface. It exists to keep architecture intent, review expectations, ADR workflows, and feature handoff discipline executable instead of tribal knowledge.
 
 ## Roadmap
 
@@ -72,9 +76,20 @@ Clear separation between control plane and execution environment. Agent-local cr
 uv sync --group dev
 uv run pytest                                  # run all tests
 uv run legion-dev architecture gate            # dependency direction + banned imports + typecheck + circular + dangerous calls + secrets
+uv run legion-dev review                       # repo-aware engineering review prompt
+uv run legion-dev adr create "<title>"         # create the next ADR from the template
+uv run legion-dev feature create "<title>"     # create a local feature handoff brief
 uv run legion-dev architecture typecheck       # mypy type checking
 uv run legion-dev architecture security        # bandit SAST scan
 uv run legion-dev architecture audit           # dependency vulnerability scan
+```
+
+Common `legion-dev` workflows:
+
+```bash
+uv run legion-dev feature show "<title>"       # inspect the current handoff brief
+uv run legion-dev feature handoff "<title>"    # emit a deterministic handoff prompt
+uv run legion-dev review                       # load active repo instructions for review
 ```
 
 Full architecture gate and advisory suite:
@@ -97,4 +112,4 @@ Runs the required architecture gate before every commit, plus advisory security 
 
 ## Project Guidelines
 
-See [CLAUDE.md](CLAUDE.md) for architecture rules, coding conventions, and the dependency decision tree. See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contributor guidance.
+See [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md) for agent-facing architecture rules and workflow expectations. See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contributor guidance on using the `cli_dev/` harness.
