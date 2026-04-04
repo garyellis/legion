@@ -4,8 +4,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from legion.cli.registry import register_command
-from legion.cli.views import print_message, render_error
+from legion.plumbing.registry import register_command
+from legion.cli_dev.views import print_message, render_error
 from legion.internal.architecture.banned_imports import (
     find_banned_import_violations,
     format_banned_violations,
