@@ -13,7 +13,7 @@ from legion.cli_dev.commands.review import (
 from legion.plumbing.subprocess import RunResult
 from legion.internal.review import (
     build_review_prompt,
-    read_claude_md,
+    read_instruction_sources,
 )
 
 
@@ -37,18 +37,34 @@ class TestFindGitRoot:
             assert result is None
 
 
-class TestReadClaudeMd:
-    """Tests for CLAUDE.md reading."""
+class TestReadInstructionSources:
+    """Tests for repo instruction source loading."""
 
-    def test_reads_existing_file(self, tmp_path: Path) -> None:
-        claude_md = tmp_path / "CLAUDE.md"
-        claude_md.write_text("# Project Rules\nDo not break things.", encoding="utf-8")
-        result = read_claude_md(tmp_path)
-        assert "Project Rules" in result
-        assert "Do not break things" in result
+    def test_reads_existing_files(self, tmp_path: Path) -> None:
+        (tmp_path / "CLAUDE.md").write_text("# CLAUDE\nDo not break things.", encoding="utf-8")
+        (tmp_path / "AGENTS.md").write_text("# AGENTS\nStay in your lane.", encoding="utf-8")
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        (codex_dir / "instructions.md").write_text(
+            "# CODEx\nPrefer handoff briefs.",
+            encoding="utf-8",
+        )
+
+        result = read_instruction_sources(tmp_path)
+        assert "## CLAUDE.md" in result
+        assert "Do not break things." in result
+        assert "## AGENTS.md" in result
+        assert "Stay in your lane." in result
+        assert "## .codex/instructions.md" in result
+        assert "Prefer handoff briefs." in result
 
     def test_returns_empty_when_missing(self, tmp_path: Path) -> None:
-        result = read_claude_md(tmp_path)
+        result = read_instruction_sources(tmp_path)
+        assert result == ""
+
+    def test_skips_empty_files(self, tmp_path: Path) -> None:
+        (tmp_path / "CLAUDE.md").write_text("", encoding="utf-8")
+        result = read_instruction_sources(tmp_path)
         assert result == ""
 
 

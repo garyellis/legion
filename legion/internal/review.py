@@ -3,6 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 
+_INSTRUCTION_SOURCES = (
+    "CLAUDE.md",
+    "AGENTS.md",
+    ".codex/instructions.md",
+)
+
+
 REVIEW_PROMPT_TEMPLATE = """\
 You are reviewing code for the Legion project. Apply these project rules:
 
@@ -46,9 +53,20 @@ def build_review_prompt(rules: str, diff: str, diff_type: str) -> str:
     )
 
 
+def read_instruction_sources(repo_root: Path) -> str:
+    """Read the active repo instruction sources for review prompts."""
+    sections: list[str] = []
+    for relative_path in _INSTRUCTION_SOURCES:
+        path = repo_root / relative_path
+        if not path.exists():
+            continue
+        content = path.read_text(encoding="utf-8").strip()
+        if not content:
+            continue
+        sections.append(f"## {relative_path}\n\n{content}")
+    return "\n\n".join(sections)
+
+
 def read_claude_md(repo_root: Path) -> str:
-    """Read CLAUDE.md from the repository root, returning empty string if absent."""
-    claude_md = repo_root / "CLAUDE.md"
-    if claude_md.exists():
-        return claude_md.read_text(encoding="utf-8")
-    return ""
+    """Backward-compatible wrapper for the main instruction bundle."""
+    return read_instruction_sources(repo_root)

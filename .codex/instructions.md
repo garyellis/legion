@@ -23,6 +23,7 @@ When using the feature brief, treat it as a handoff contract:
 
 - Fill in repo-grounded context, constraints, target files, risks, verification commands, and done condition.
 - Use it as the source of truth for sub-agent delegation or session handoff.
+- Use `legion-dev feature show "<title>"` to inspect it and `legion-dev feature handoff "<title>"` to produce a copyable execution prompt.
 - Prefer the smallest implementation that satisfies the brief cleanly.
 
 ### Rules

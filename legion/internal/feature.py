@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
+
+
+@dataclass
+class FeatureDocument:
+    """Parsed representation of a feature handoff brief."""
+
+    title: str
+    status: str
+    date: str
+    sections: dict[str, str] = field(default_factory=dict)
+    filepath: Path = field(default_factory=lambda: Path())
+    content: str = ""
 
 
 def slugify_feature_title(title: str) -> str:
@@ -21,6 +34,12 @@ def feature_docs_dir(root: Path) -> Path:
 def feature_filepath(root: Path, title: str) -> Path:
     """Return the markdown path for a feature handoff brief."""
     return feature_docs_dir(root) / f"{slugify_feature_title(title)}.md"
+
+
+def find_feature_file(root: Path, title: str) -> Path | None:
+    """Find a feature brief by title."""
+    path = feature_filepath(root, title)
+    return path if path.exists() else None
 
 
 def generate_feature_template(*, title: str, created_date: str) -> str:
@@ -133,3 +152,69 @@ def generate_feature_template(*, title: str, created_date: str) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def title_from_filename(filename: str) -> str:
+    """Convert a feature filename like ``add-redis.md`` into a title."""
+    return filename.removesuffix(".md").replace("-", " ").title()
+
+
+def parse_feature_document(filepath: Path) -> FeatureDocument:
+    """Parse a feature brief markdown file into a structured document."""
+    text = filepath.read_text(encoding="utf-8")
+
+    title_match = re.search(r"^#\s+Feature Requirements Gate:\s*(.+)$", text, re.MULTILINE)
+    title = title_match.group(1).strip() if title_match else title_from_filename(filepath.name)
+    status = _extract_meta(text, "Status")
+    feature_date = _extract_meta(text, "Date")
+    sections = _parse_sections(text)
+
+    return FeatureDocument(
+        title=title,
+        status=status,
+        date=feature_date,
+        sections=sections,
+        filepath=filepath,
+        content=text,
+    )
+
+
+def _extract_meta(text: str, field_name: str) -> str:
+    """Extract a **Field**: Value metadata line."""
+    pattern = rf"\*\*{re.escape(field_name)}\*\*:\s*(.+)"
+    match = re.search(pattern, text)
+    return match.group(1).strip() if match else ""
+
+
+def _parse_sections(text: str) -> dict[str, str]:
+    """Split feature content into sections keyed by ``##`` heading name."""
+    sections: dict[str, str] = {}
+    headings = list(re.finditer(r"^##\s+(.+)$", text, re.MULTILINE))
+    for i, heading in enumerate(headings):
+        name = heading.group(1).strip()
+        start = heading.end()
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(text)
+        sections[name] = text[start:end].strip()
+    return sections
+
+
+def build_feature_handoff_prompt(doc: FeatureDocument) -> str:
+    """Build a deterministic handoff prompt for a new session or sub-agent."""
+    return (
+        "You are continuing Legion feature work.\n\n"
+        "Use the brief below as the source of truth. Do not widen scope.\n"
+        "If key information is missing, report it before changing code.\n\n"
+        f"Feature: {doc.title}\n"
+        f"Status: {doc.status or 'UNKNOWN'}\n"
+        f"Date: {doc.date or 'UNKNOWN'}\n"
+        f"File: {doc.filepath.as_posix()}\n\n"
+        "Implementation rules:\n"
+        "- Follow the Legion layer model.\n"
+        "- Do not add dependencies without an ADR.\n"
+        "- Prefer the smallest change that satisfies the brief.\n"
+        "- Run `uv run pytest` and `uv run legion-dev architecture gate` before handing off.\n\n"
+        "Feature brief:\n"
+        "```markdown\n"
+        f"{doc.content}\n"
+        "```\n"
+    )

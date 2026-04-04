@@ -88,7 +88,7 @@ agents/    -> imports plumbing/, core/, domain/, services/
 surfaces   -> import from any layer below, never from each other
 ```
 
-Enforced by `uv run legion-dev architecture check` and `tests/test_dependency_direction.py`.
+Enforced by `uv run legion-dev architecture gate` and `tests/test_dependency_direction.py`.
 
 ### Core stays framework-free
 
@@ -117,6 +117,8 @@ For non-trivial feature requests, create a local feature handoff brief before im
 ```bash
 uv run legion-dev feature create "<title>"
 ```
+
+Use `uv run legion-dev feature show "<title>"` to inspect the brief and `uv run legion-dev feature handoff "<title>"` to emit a deterministic handoff prompt for a new session or delegated agent.
 
 Use the brief when any of these are true:
 
@@ -158,7 +160,7 @@ uv sync --group dev
 uv run pytest
 
 # Architecture checks (run before committing)
-uv run legion-dev architecture check           # layer violations + banned imports
+uv run legion-dev architecture gate            # required gate: layer violations + banned imports + typecheck + circular + dangerous calls + secrets
 uv run legion-dev architecture typecheck       # mypy
 uv run legion-dev architecture circular        # circular import detection
 uv run legion-dev architecture deadcode        # vulture dead code
@@ -166,7 +168,6 @@ uv run legion-dev architecture unused-deps     # unused dependency detection
 uv run legion-dev architecture dangerous-calls # eval/exec/pickle restrictions
 uv run legion-dev architecture security        # bandit SAST
 uv run legion-dev architecture audit           # pip-audit CVE scan
-uv run legion-dev architecture secrets-check   # sensitive file detection
 
 # Enable pre-commit hook (runs gate checks automatically)
 git config core.hooksPath .githooks
@@ -197,12 +198,13 @@ wt remove                                  # abandon a worktree
 ```
 1. wt switch -c feature/<name>                  # isolate
 2. uv run legion-dev feature create "<title>"    # handoff brief for non-trivial work
-3. implement changes                             # code
-4. uv run pytest                                 # test
-5. uv run legion-dev architecture check          # gate
-6. /review                                       # subagent code review (see below)
-7. git add <files> && git commit                 # commit
-8. wt merge main                                 # land on main
+3. uv run legion-dev feature handoff "<title>"    # copyable handoff for a new session or sub-agent
+4. implement changes                             # code
+5. uv run pytest                                 # test
+6. uv run legion-dev architecture gate           # gate
+7. /review                                       # subagent code review (see below)
+8. git add <files> && git commit                 # commit
+9. wt merge main                                 # land on main
 ```
 
 See `.claude/rules/worktrees.md` for AI agent coordination rules (which files are safe to parallelize, which require coordination).
@@ -216,7 +218,7 @@ Every prompt should end with a **quality gate** — tell Claude to test, review,
 ```
 After implementation:
 1. Run uv run pytest
-2. Run uv run legion-dev architecture check
+2. Run uv run legion-dev architecture gate
 3. Run /review and fix any findings
 4. Repeat steps 1-3 up to 3 passes until clean
 5. Commit and push the branch
@@ -239,7 +241,7 @@ wt switch -x claude -c feature/health-endpoints -- \
 
 After implementation:
 1. Run uv run pytest
-2. Run uv run legion-dev architecture check
+2. Run uv run legion-dev architecture gate
 3. Run /review and fix any findings
 4. Repeat 1-3 up to 3 passes until clean
 5. Commit and push
@@ -273,7 +275,7 @@ wt switch -x claude -c feature/telemetry -- \
 
 After implementation:
 1. Run uv run pytest
-2. Run uv run legion-dev architecture check
+2. Run uv run legion-dev architecture gate
 3. Run /review and fix any findings
 4. Repeat 1-3 up to 3 passes until clean
 5. Commit and push
@@ -291,7 +293,7 @@ wt switch -x claude -c feature/alembic -- \
 
 After implementation:
 1. Run uv run pytest
-2. Run uv run legion-dev architecture check
+2. Run uv run legion-dev architecture gate
 3. Run /review and fix any findings
 4. Repeat 1-3 up to 3 passes until clean
 5. Commit and push

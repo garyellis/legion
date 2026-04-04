@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from typing import TypeVar, overload
 
 from pydantic import BaseModel
 from rich.table import Table
@@ -11,15 +12,27 @@ from rich.table import Table
 from legion.cli.views.base import console
 from legion.core.fleet_api.models import AgentGroupResponse, AgentResponse, OrgResponse, ProjectResponse
 
+ModelT = TypeVar("ModelT", bound=BaseModel)
+
 
 # --- JSON output helper ---
 
+@overload
+def _print_json(obj: BaseModel) -> None:
+    ...
 
-def _print_json(obj: BaseModel | list[BaseModel]) -> None:
+
+@overload
+def _print_json(obj: list[ModelT]) -> None:
+    ...
+
+
+def _print_json(obj: object) -> None:
     """Serialize one or more Pydantic models to JSON and print to stdout."""
     if isinstance(obj, list):
         print(json.dumps([item.model_dump(mode="json") for item in obj], indent=2))
     else:
+        assert isinstance(obj, BaseModel)
         print(json.dumps(obj.model_dump(mode="json"), indent=2))
 
 

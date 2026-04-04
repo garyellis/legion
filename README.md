@@ -15,7 +15,7 @@ What works today and what's on the roadmap.
 | DNS tooling | Working | Migration manager, TTL analysis, cache tracking |
 | SSH / WoL | Working | Paramiko SSH client, Wake-on-LAN |
 | Incident system | Working | Domain model, service layer, Slack-integrated lifecycle |
-| Architecture harness | Working | 9 static analysis checks, pre-commit hook, CI-ready |
+| Architecture harness | Working | Enforced gate + advisory checks, pre-commit hook, CI-ready |
 | Domain + services layer | Working | Jobs, sessions, agents, fleet, dispatch, filter, repositories |
 | Distributed agent fleet | Planned | Agents running inside target environments with local execution |
 | WebSocket control plane | Planned | Real-time agent-to-control-plane communication |
@@ -71,24 +71,20 @@ Clear separation between control plane and execution environment. Agent-local cr
 ```bash
 uv sync --group dev
 uv run pytest                                  # run all tests
-uv run legion-dev architecture check           # dependency direction + banned imports + dangerous calls
+uv run legion-dev architecture gate            # dependency direction + banned imports + typecheck + circular + dangerous calls + secrets
 uv run legion-dev architecture typecheck       # mypy type checking
 uv run legion-dev architecture security        # bandit SAST scan
 uv run legion-dev architecture audit           # dependency vulnerability scan
 ```
 
-Full architecture check suite:
+Full architecture gate and advisory suite:
 
 ```bash
-uv run legion-dev architecture check           # gate: layer violations
-uv run legion-dev architecture typecheck       # gate: type errors
-uv run legion-dev architecture circular        # circular import detection
-uv run legion-dev architecture deadcode        # vulture dead code
-uv run legion-dev architecture unused-deps     # unused dependency detection
-uv run legion-dev architecture dangerous-calls # eval/exec/pickle restrictions
-uv run legion-dev architecture security        # bandit SAST
-uv run legion-dev architecture audit           # pip-audit CVE scan
-uv run legion-dev architecture secrets-check   # sensitive file detection
+uv run legion-dev architecture gate            # required gate
+uv run legion-dev architecture deadcode        # advisory: vulture dead code
+uv run legion-dev architecture unused-deps     # advisory: unused dependency detection
+uv run legion-dev architecture security        # advisory: bandit SAST
+uv run legion-dev architecture audit           # advisory: pip-audit CVE scan
 ```
 
 ## Pre-commit Hook
@@ -97,7 +93,7 @@ uv run legion-dev architecture secrets-check   # sensitive file detection
 git config core.hooksPath .githooks
 ```
 
-Runs gate checks (architecture + secrets) before every commit.
+Runs the required architecture gate before every commit, plus advisory security scan.
 
 ## Project Guidelines
 

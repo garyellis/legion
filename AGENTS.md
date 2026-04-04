@@ -8,7 +8,7 @@ Legion is an SRE and Platform Engineering agent fleet system. A control plane (F
 
 ## Architecture: Layer Model
 
-Imports flow **downward only**. No exceptions. Enforced by `legion-dev architecture check` and `tests/test_dependency_direction.py`.
+Imports flow **downward only**. No exceptions. Enforced by `legion-dev architecture gate` and `tests/test_dependency_direction.py`.
 
 ```
 plumbing/    → imports NOTHING from legion (stdlib + external libs only)
@@ -81,6 +81,7 @@ Treat the feature brief as a handoff contract:
 
 - Fill in repo-grounded context, constraints, target files, risks, verification commands, and done condition.
 - Use it as the source of truth for sub-agent delegation or session handoff.
+- Use `legion-dev feature show "<title>"` to inspect it and `legion-dev feature handoff "<title>"` to produce a copyable execution prompt.
 - Generated files live in `docs/features/` and are intentionally gitignored except for `.gitkeep`.
 
 ## Code Conventions
@@ -119,7 +120,7 @@ Treat the feature brief as a handoff contract:
 
 ```bash
 uv run pytest                              # all tests
-uv run legion-dev architecture check       # architecture check (CLI)
+uv run legion-dev architecture gate         # architecture gate (CLI)
 uv run pytest tests/test_dependency_direction.py  # architecture check (pytest)
 uv run pytest -k "test_domain"             # domain tests only
 ```
@@ -184,7 +185,7 @@ Before committing, always run:
 
 ```bash
 uv run pytest
-uv run legion-dev architecture check
+uv run legion-dev architecture gate
 ```
 
 Fix all failures before committing.

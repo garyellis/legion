@@ -49,6 +49,19 @@ from legion.internal.architecture.unused_deps import (
 )
 
 
+def _format_uncovered_directories(uncovered: set[str]) -> str:
+    """Format directories not covered by the dependency rules."""
+    lines = ["\nUncovered directories found:\n"]
+    for name in sorted(uncovered):
+        lines.append(f"  {name}")
+    lines.append(
+        "\nRule: every top-level directory under legion/ must be covered by "
+        "LAYER_ALLOWED_IMPORTS or SURFACES in "
+        "legion/internal/architecture/dependency_check.py"
+    )
+    return "\n".join(lines)
+
+
 @register_command("architecture", "check")
 def architecture_check(
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show per-file details")] = False,
@@ -79,6 +92,46 @@ def architecture_check(
         raise typer.Exit(code=1)
 
     print_message("No architectural violations found.", style="green")
+
+
+@register_command("architecture", "gate")
+def architecture_gate() -> None:
+    """Run the enforced developer gate for Legion changes."""
+    failures: list[str] = []
+
+    uncovered = find_uncovered_directories()
+    if uncovered:
+        failures.append(_format_uncovered_directories(uncovered))
+
+    violations = find_violations()
+    if violations:
+        failures.append(format_violations(violations))
+
+    banned = find_banned_import_violations()
+    if banned:
+        failures.append(format_banned_violations(banned))
+
+    dangerous = find_dangerous_call_violations()
+    if dangerous:
+        failures.append(format_dangerous_violations(dangerous))
+
+    type_result = run_type_check()
+    if not type_result.success:
+        failures.append(format_type_errors(type_result))
+
+    cycles = find_circular_imports()
+    if cycles:
+        failures.append(format_cycles(cycles))
+
+    secrets = check_staged_files()
+    if secrets:
+        failures.append(format_sensitive_violations(secrets))
+
+    if failures:
+        render_error("\n".join(failures))
+        raise typer.Exit(code=1)
+
+    print_message("No gate violations found.", style="green")
 
 
 @register_command("architecture", "typecheck")

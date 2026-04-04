@@ -15,7 +15,7 @@ from legion.plumbing.subprocess import (
     git_log,
     git_root,
 )
-from legion.internal.review import build_review_prompt, read_claude_md
+from legion.internal.review import build_review_prompt, read_instruction_sources
 
 _AGENT_HELP = f"AI agent to use ({', '.join(available_agents())})"
 
@@ -66,7 +66,7 @@ def review_diff(
 ) -> None:
     """Review the current git diff using an AI agent."""
     repo_root = _get_git_root_or_exit()
-    rules = read_claude_md(repo_root)
+    rules = read_instruction_sources(repo_root)
 
     diff_args: list[str] = []
     if base:
@@ -94,7 +94,7 @@ def review_file(
 ) -> None:
     """Review a specific file using an AI agent."""
     repo_root = _get_git_root_or_exit()
-    rules = read_claude_md(repo_root)
+    rules = read_instruction_sources(repo_root)
 
     file_path = Path(path)
     if not file_path.exists():
@@ -121,7 +121,7 @@ def review_pr(
 ) -> None:
     """Review all changes on the current branch vs a base branch."""
     repo_root = _get_git_root_or_exit()
-    rules = read_claude_md(repo_root)
+    rules = read_instruction_sources(repo_root)
 
     # Gather the diff
     diff = git_diff([f"{base}...HEAD"])
