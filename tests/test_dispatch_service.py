@@ -1,5 +1,7 @@
 """Tests for DispatchService."""
 
+from __future__ import annotations
+
 import pytest
 
 from legion.domain.agent import AgentStatus
@@ -147,3 +149,27 @@ class TestDispatchService:
 
         reverted = service.reassign_disconnected(agent.id)
         assert len(reverted) == 0
+
+    def test_active_agent_counts_are_initialized_once(
+        self,
+        service,
+        fleet_repo,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        original_list_agents = fleet_repo.list_agents
+        calls = []
+
+        def counting_list_agents(agent_group_id):
+            calls.append(agent_group_id)
+            return original_list_agents(agent_group_id)
+
+        monkeypatch.setattr(fleet_repo, "list_agents", counting_list_agents)
+
+        agent = service.register_agent("ag-1", "agent-01")
+        job = service.create_job("org-1", "ag-1", JobType.TRIAGE, "alert")
+        service.dispatch_pending("ag-1")
+        job.start()
+        service.complete_job(job.id, "done")
+
+        assert calls == ["ag-1"]
+        assert agent.status == AgentStatus.IDLE

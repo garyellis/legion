@@ -9,6 +9,7 @@ import logging
 from typing import Callable
 
 from legion.domain.session import Session
+from legion.plumbing import telemetry
 from legion.services.exceptions import SessionError
 from legion.services.fleet_repository import FleetRepository
 from legion.services.session_repository import SessionRepository
@@ -55,6 +56,7 @@ class SessionService:
             slack_thread_ts=thread_ts,
         )
         self.session_repo.save(session)
+        telemetry.sessions_created_total.labels(org_id, agent_group_id).inc()
         logger.info("Session created: %s (channel=%s)", session.id, channel_id)
 
         if self._on_created:
