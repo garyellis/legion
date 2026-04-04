@@ -18,6 +18,7 @@ from legion.api.routes import (
     filter_rules,
     health,
     jobs,
+    metrics,
     organizations,
     prompt_configs,
     sessions,
@@ -95,6 +96,10 @@ def create_app(
 
         app.add_middleware(APIKeyMiddleware, api_key=api_key)
 
+    from legion.api.middleware import RequestMetricsMiddleware
+
+    app.add_middleware(RequestMetricsMiddleware)
+
     register_error_handlers(app)
 
     app.include_router(health.router)
@@ -106,6 +111,7 @@ def create_app(
     app.include_router(prompt_configs.router)
     app.include_router(jobs.router)
     app.include_router(sessions.router)
+    app.include_router(metrics.router)
     app.include_router(ws_router)
 
     return app
