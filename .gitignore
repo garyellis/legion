@@ -16,3 +16,7 @@ references/**
 
 # Archived drafts
 __archived__/
+
+# Local feature-planning workspace
+docs/features/*.md
+!docs/features/.gitkeep

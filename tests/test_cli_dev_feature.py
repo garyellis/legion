@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+import typer
+
+from legion.cli_dev.commands.feature import feature_create
+from legion.internal.feature import (
+    feature_docs_dir,
+    feature_filepath,
+    generate_feature_template,
+    slugify_feature_title,
+)
+
+
+class TestSlugifyFeatureTitle:
+    def test_basic(self) -> None:
+        assert slugify_feature_title("Add Feature Briefs") == "add-feature-briefs"
+
+    def test_special_chars(self) -> None:
+        assert slugify_feature_title("Prompt Template (v1)") == "prompt-template-v1"
+
+    def test_extra_spaces(self) -> None:
+        assert slugify_feature_title("  lots   of   spaces  ") == "lots-of-spaces"
+
+
+class TestFeaturePaths:
+    def test_feature_docs_dir(self, tmp_path: Path) -> None:
+        assert feature_docs_dir(tmp_path) == tmp_path / "docs" / "features"
+
+    def test_feature_filepath(self, tmp_path: Path) -> None:
+        assert feature_filepath(tmp_path, "Add Feature Briefs") == (
+            tmp_path / "docs" / "features" / "add-feature-briefs.md"
+        )
+
+
+class TestGenerateFeatureTemplate:
+    def test_includes_required_sections(self) -> None:
+        content = generate_feature_template(
+            title="Add Feature Briefs",
+            created_date="2026-04-04",
+        )
+        assert "# Feature Requirements Gate: Add Feature Briefs" in content
+        assert "**Status**: DRAFT" in content
+        assert "**Date**: 2026-04-04" in content
+        assert "## Problem" in content
+        assert "## Requirements Gate" in content
+        assert "## Constraints" in content
+        assert "## Interfaces And Data Shapes" in content
+        assert "## Files And Ownership" in content
+        assert "## Done Condition" in content
+        assert "## Acceptance Criteria" in content
+        assert "## Session Handoff" in content
+
+    def test_includes_legion_specific_constraints(self) -> None:
+        content = generate_feature_template(
+            title="Add Feature Briefs",
+            created_date="2026-04-04",
+        )
+        assert "Respect the Legion layer model" in content
+        assert "Do not add dependencies without an ADR" in content
+        assert "Prefer the smallest change that solves the problem" in content
+        assert "usable as handoff context for a new session or sub-agent" in content
+
+
+class TestFeatureCreate:
+    def test_dry_run_creates_no_files(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "legion.cli_dev.commands.feature._project_root", lambda: tmp_path
+        )
+        feature_create(title="Add Feature Briefs", dry_run=True)
+        assert not (tmp_path / "docs" / "features").exists()
+
+    def test_creates_feature_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "legion.cli_dev.commands.feature._project_root", lambda: tmp_path
+        )
+        feature_create(title="Add Feature Briefs", dry_run=False)
+        path = tmp_path / "docs" / "features" / "add-feature-briefs.md"
+        assert path.exists()
+        assert "# Feature Requirements Gate: Add Feature Briefs" in path.read_text(encoding="utf-8")
+
+    def test_creates_parent_directory(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "legion.cli_dev.commands.feature._project_root", lambda: tmp_path
+        )
+        feature_create(title="New Brief", dry_run=False)
+        assert (tmp_path / "docs" / "features").is_dir()
+
+    def test_refuses_overwrite(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "legion.cli_dev.commands.feature._project_root", lambda: tmp_path
+        )
+        feature_create(title="Duplicate Brief", dry_run=False)
+        with pytest.raises(typer.Exit):
+            feature_create(title="Duplicate Brief", dry_run=False)

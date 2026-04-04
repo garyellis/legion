@@ -110,6 +110,27 @@ incident_service = IncidentService(
 
 Every new dependency requires a decision record in `docs/decisionlog/`. Run `legion-dev adr create "<title>" --dependency` to generate the next ADR with the correct ID and template. See `docs/decisionlog/0000-template.md` for the full format reference.
 
+### Non-trivial features require a handoff brief
+
+For non-trivial feature requests, create a local feature handoff brief before implementation or delegation:
+
+```bash
+uv run legion-dev feature create "<title>"
+```
+
+Use the brief when any of these are true:
+
+- More than one subsystem, surface, or layer is likely to change
+- The request is underspecified and behavior would otherwise be inferred
+- There are meaningful implementation tradeoffs
+- The work is likely to be handed to a sub-agent or a fresh session
+- Acceptance criteria or verification steps are not already explicit
+- The change affects user-visible workflows, persistence, config, or public interfaces
+
+Skip the brief only for clearly small, local changes. If skipping, warn the operator that bypassing the feature gate increases the risk of ambiguity, architectural drift, and weaker handoff quality, then proceed only if they still want to skip it.
+
+Generated briefs live in `docs/features/`. The directory is tracked, but generated markdown files are gitignored because they are local working artifacts rather than long-lived repo docs.
+
 ---
 
 ## Common Mistakes
@@ -175,12 +196,13 @@ wt remove                                  # abandon a worktree
 
 ```
 1. wt switch -c feature/<name>                  # isolate
-2. implement changes                             # code
-3. uv run pytest                                 # test
-4. uv run legion-dev architecture check          # gate
-5. /review                                       # subagent code review (see below)
-6. git add <files> && git commit                 # commit
-7. wt merge main                                 # land on main
+2. uv run legion-dev feature create "<title>"    # handoff brief for non-trivial work
+3. implement changes                             # code
+4. uv run pytest                                 # test
+5. uv run legion-dev architecture check          # gate
+6. /review                                       # subagent code review (see below)
+7. git add <files> && git commit                 # commit
+8. wt merge main                                 # land on main
 ```
 
 See `.claude/rules/worktrees.md` for AI agent coordination rules (which files are safe to parallelize, which require coordination).

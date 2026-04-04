@@ -62,6 +62,27 @@ Parses input or formats output for a specific medium?         → surface layer
 AI runtime infrastructure?                                    → agents/
 ```
 
+## Feature Intake Default
+
+For non-trivial feature requests, create a local feature handoff brief with `legion-dev feature create "<title>"` before implementation or delegation.
+
+Use the brief when any of these are true:
+
+- More than one subsystem, surface, or layer is likely to change.
+- The request is underspecified and behavior would otherwise be inferred.
+- There are meaningful implementation tradeoffs.
+- The work is likely to be handed to a sub-agent or a fresh session.
+- Acceptance criteria or verification steps are not already explicit.
+- The change affects user-visible workflows, persistence, config, or public interfaces.
+
+Skip the brief only for clearly small, local changes. If skipping, warn the user that bypassing the feature gate increases the risk of ambiguity, architectural drift, and weaker handoff quality, then proceed if they still want to skip it.
+
+Treat the feature brief as a handoff contract:
+
+- Fill in repo-grounded context, constraints, target files, risks, verification commands, and done condition.
+- Use it as the source of truth for sub-agent delegation or session handoff.
+- Generated files live in `docs/features/` and are intentionally gitignored except for `.gitkeep`.
+
 ## Code Conventions
 
 ### Data Modeling
