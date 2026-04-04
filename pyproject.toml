@@ -28,6 +28,7 @@ dependencies = [
 
 [project.scripts]
 legion-cli = "legion.main:main"
+legion-dev = "legion.cli_dev.main:main"
 legion-api = "legion.api.main:main"
 legion-slack = "legion.slack.main:main"
 legion-slack-manifest = "legion.slack.manifest:main"
