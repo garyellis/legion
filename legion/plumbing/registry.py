@@ -2,8 +2,8 @@ from typing import Callable
 
 _registry: list[tuple[str, str, Callable[..., None]]] = []
 
-def register_command(group: str, name: str):
-    def decorator(func: Callable[..., None]):
+def register_command(group: str, name: str) -> Callable[[Callable[..., None]], Callable[..., None]]:
+    def decorator(func: Callable[..., None]) -> Callable[..., None]:
         _registry.append((group, name, func))
         return func
     return decorator

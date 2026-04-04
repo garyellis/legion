@@ -7,7 +7,7 @@ from typing import Annotated
 import httpx
 import typer
 
-from legion.cli.registry import register_command
+from legion.plumbing.registry import register_command
 from legion.cli.views import render_error
 from legion.cli.views.fleet import (
     display_agent_group_list,

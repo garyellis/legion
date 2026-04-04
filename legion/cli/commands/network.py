@@ -2,7 +2,7 @@ from typing import Annotated, Optional, List
 import typer
 from datetime import datetime
 
-from legion.cli.registry import register_command
+from legion.plumbing.registry import register_command
 from legion.core.network.dns_check import (
     DNSMigrationManager, 
     MigrationConfig

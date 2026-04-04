@@ -2,7 +2,7 @@ from typing import Annotated, Optional
 import json
 import typer
 
-from legion.cli.registry import register_command
+from legion.plumbing.registry import register_command
 from legion.core.network.ssh_client import SSH
 from legion.core.network.wol import WoLPort, wake
 from legion.core.openstack.orchestrator import (

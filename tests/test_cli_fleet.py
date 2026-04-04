@@ -54,7 +54,7 @@ SAMPLE_AGENTS = [
 
 def _get_app():
     """Build a fresh Typer app with fleet commands registered."""
-    from legion.cli.registry import get_registry
+    from legion.plumbing.registry import get_registry
 
     import legion.cli.commands.fleet  # noqa: F401
 

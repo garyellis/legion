@@ -3,7 +3,7 @@ import pkgutil
 
 import typer
 
-from legion.cli.registry import get_registry
+from legion.plumbing.registry import get_registry
 from legion.plumbing.logging import LogOutput, setup_logging
 
 app = typer.Typer()
