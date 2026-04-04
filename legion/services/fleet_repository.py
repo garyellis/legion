@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Engine, Integer, String, Text
+from sqlalchemy import Column, DateTime, Engine, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import sessionmaker
 
 from legion.domain.agent import Agent, AgentStatus
@@ -20,6 +20,7 @@ from legion.domain.agent_group import AgentGroup, ExecutionMode
 from legion.domain.channel_mapping import ChannelMapping, ChannelMode
 from legion.domain.filter_rule import FilterAction, FilterRule
 from legion.domain.organization import Organization
+from legion.domain.project import Project
 from legion.domain.prompt_config import PromptConfig
 from legion.plumbing.database import Base
 
@@ -44,6 +45,19 @@ class FleetRepository(ABC):
     @abstractmethod
     def delete_org(self, org_id: str) -> bool: ...
 
+    # Project
+    @abstractmethod
+    def save_project(self, project: Project) -> None: ...
+
+    @abstractmethod
+    def get_project(self, project_id: str) -> Optional[Project]: ...
+
+    @abstractmethod
+    def list_projects(self, org_id: str) -> list[Project]: ...
+
+    @abstractmethod
+    def delete_project(self, project_id: str) -> bool: ...
+
     # AgentGroup
     @abstractmethod
     def save_agent_group(self, ag: AgentGroup) -> None: ...
@@ -53,6 +67,9 @@ class FleetRepository(ABC):
 
     @abstractmethod
     def list_agent_groups(self, org_id: str) -> list[AgentGroup]: ...
+
+    @abstractmethod
+    def list_agent_groups_by_project(self, project_id: str) -> list[AgentGroup]: ...
 
     @abstractmethod
     def delete_agent_group(self, ag_id: str) -> bool: ...
@@ -130,11 +147,23 @@ class OrganizationRow(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False)
 
 
+class ProjectRow(Base):
+    __tablename__ = "projects"
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False)
+    name = Column(String, nullable=False)
+    slug = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+
 class AgentGroupRow(Base):
     __tablename__ = "agent_groups"
 
     id = Column(String, primary_key=True)
-    org_id = Column(String, nullable=False)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
     name = Column(String, nullable=False)
     slug = Column(String, nullable=False)
     environment = Column(String, nullable=False)
@@ -148,7 +177,7 @@ class AgentRow(Base):
     __tablename__ = "agents"
 
     id = Column(String, primary_key=True)
-    agent_group_id = Column(String, nullable=False)
+    agent_group_id = Column(String, ForeignKey("agent_groups.id"), nullable=False)
     name = Column(String, nullable=False)
     status = Column(String, nullable=False, default=AgentStatus.OFFLINE.value)
     current_job_id = Column(String, nullable=True)
@@ -162,9 +191,9 @@ class ChannelMappingRow(Base):
     __tablename__ = "channel_mappings"
 
     id = Column(String, primary_key=True)
-    org_id = Column(String, nullable=False)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False)
     channel_id = Column(String, nullable=False, unique=True)
-    agent_group_id = Column(String, nullable=False)
+    agent_group_id = Column(String, ForeignKey("agent_groups.id"), nullable=False)
     mode = Column(String, nullable=False, default=ChannelMode.ALERT.value)
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
@@ -174,7 +203,7 @@ class FilterRuleRow(Base):
     __tablename__ = "filter_rules"
 
     id = Column(String, primary_key=True)
-    channel_mapping_id = Column(String, nullable=False)
+    channel_mapping_id = Column(String, ForeignKey("channel_mappings.id"), nullable=False)
     pattern = Column(String, nullable=False)
     action = Column(String, nullable=False, default=FilterAction.TRIAGE.value)
     priority = Column(Integer, nullable=False, default=0)
@@ -186,7 +215,7 @@ class PromptConfigRow(Base):
     __tablename__ = "prompt_configs"
 
     id = Column(String, primary_key=True)
-    agent_group_id = Column(String, nullable=False, unique=True)
+    agent_group_id = Column(String, ForeignKey("agent_groups.id"), nullable=False, unique=True)
     system_prompt = Column(Text, nullable=False, default="")
     stack_manifest = Column(Text, nullable=False, default="")
     persona = Column(Text, nullable=False, default="")
@@ -238,6 +267,46 @@ class SQLiteFleetRepository(FleetRepository):
             session.commit()
             return True
 
+    # -- Project ------------------------------------------------------------
+
+    def save_project(self, project: Project) -> None:
+        with self._session_factory() as session:
+            row = session.get(ProjectRow, project.id)
+            if row is None:
+                row = ProjectRow(id=project.id)
+                session.add(row)
+            row.org_id = project.org_id
+            row.name = project.name
+            row.slug = project.slug
+            row.created_at = project.created_at
+            row.updated_at = project.updated_at
+            session.commit()
+
+    def get_project(self, project_id: str) -> Optional[Project]:
+        with self._session_factory() as session:
+            row = session.get(ProjectRow, project_id)
+            if row is None:
+                return None
+            return self._project_to_domain(row)
+
+    def list_projects(self, org_id: str) -> list[Project]:
+        with self._session_factory() as session:
+            rows = (
+                session.query(ProjectRow)
+                .filter(ProjectRow.org_id == org_id)
+                .all()
+            )
+            return [self._project_to_domain(r) for r in rows]
+
+    def delete_project(self, project_id: str) -> bool:
+        with self._session_factory() as session:
+            row = session.get(ProjectRow, project_id)
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            return True
+
     # -- AgentGroup ---------------------------------------------------------
 
     def save_agent_group(self, ag: AgentGroup) -> None:
@@ -247,6 +316,7 @@ class SQLiteFleetRepository(FleetRepository):
                 row = AgentGroupRow(id=ag.id)
                 session.add(row)
             row.org_id = ag.org_id
+            row.project_id = ag.project_id
             row.name = ag.name
             row.slug = ag.slug
             row.environment = ag.environment
@@ -268,6 +338,15 @@ class SQLiteFleetRepository(FleetRepository):
             rows = (
                 session.query(AgentGroupRow)
                 .filter(AgentGroupRow.org_id == org_id)
+                .all()
+            )
+            return [self._ag_to_domain(r) for r in rows]
+
+    def list_agent_groups_by_project(self, project_id: str) -> list[AgentGroup]:
+        with self._session_factory() as session:
+            rows = (
+                session.query(AgentGroupRow)
+                .filter(AgentGroupRow.project_id == project_id)
                 .all()
             )
             return [self._ag_to_domain(r) for r in rows]
@@ -356,11 +435,24 @@ class SQLiteFleetRepository(FleetRepository):
         )
 
     @staticmethod
+    def _project_to_domain(row: ProjectRow) -> Project:
+        ensure = SQLiteFleetRepository._ensure_utc
+        return Project(
+            id=row.id,
+            org_id=row.org_id,
+            name=row.name,
+            slug=row.slug,
+            created_at=ensure(row.created_at),
+            updated_at=ensure(row.updated_at),
+        )
+
+    @staticmethod
     def _ag_to_domain(row: AgentGroupRow) -> AgentGroup:
         ensure = SQLiteFleetRepository._ensure_utc
         return AgentGroup(
             id=row.id,
             org_id=row.org_id,
+            project_id=row.project_id,
             name=row.name,
             slug=row.slug,
             environment=row.environment,

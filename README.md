@@ -71,24 +71,24 @@ Clear separation between control plane and execution environment. Agent-local cr
 ```bash
 uv sync --group dev
 uv run pytest                                  # run all tests
-uv run legion-cli architecture check           # dependency direction + banned imports + dangerous calls
-uv run legion-cli architecture typecheck       # mypy type checking
-uv run legion-cli architecture security        # bandit SAST scan
-uv run legion-cli architecture audit           # dependency vulnerability scan
+uv run legion-dev architecture check           # dependency direction + banned imports + dangerous calls
+uv run legion-dev architecture typecheck       # mypy type checking
+uv run legion-dev architecture security        # bandit SAST scan
+uv run legion-dev architecture audit           # dependency vulnerability scan
 ```
 
 Full architecture check suite:
 
 ```bash
-uv run legion-cli architecture check           # gate: layer violations
-uv run legion-cli architecture typecheck       # gate: type errors
-uv run legion-cli architecture circular        # circular import detection
-uv run legion-cli architecture deadcode        # vulture dead code
-uv run legion-cli architecture unused-deps     # unused dependency detection
-uv run legion-cli architecture dangerous-calls # eval/exec/pickle restrictions
-uv run legion-cli architecture security        # bandit SAST
-uv run legion-cli architecture audit           # pip-audit CVE scan
-uv run legion-cli architecture secrets-check   # sensitive file detection
+uv run legion-dev architecture check           # gate: layer violations
+uv run legion-dev architecture typecheck       # gate: type errors
+uv run legion-dev architecture circular        # circular import detection
+uv run legion-dev architecture deadcode        # vulture dead code
+uv run legion-dev architecture unused-deps     # unused dependency detection
+uv run legion-dev architecture dangerous-calls # eval/exec/pickle restrictions
+uv run legion-dev architecture security        # bandit SAST
+uv run legion-dev architecture audit           # pip-audit CVE scan
+uv run legion-dev architecture secrets-check   # sensitive file detection
 ```
 
 ## Pre-commit Hook

@@ -37,3 +37,7 @@ class LegionError(Exception):
             f"{f}={getattr(self, f)!r}" for f in self._serializable_fields
         )
         return f"{type(self).__name__}({fields})"
+
+
+class CoreError(LegionError):
+    """Base for all core/ layer exceptions (infrastructure clients)."""

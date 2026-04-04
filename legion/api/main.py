@@ -20,6 +20,7 @@ from legion.api.routes import (
     jobs,
     metrics,
     organizations,
+    projects,
     prompt_configs,
     sessions,
 )
@@ -33,6 +34,29 @@ from legion.services.session_repository import SessionRepository
 from legion.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
+
+# Well-known IDs for the default org and project.
+_DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000000"
+_DEFAULT_PROJECT_ID = "00000000-0000-0000-0000-000000000001"
+
+
+def _seed_defaults(fleet_repo: FleetRepository) -> None:
+    """Ensure the 'default' organization and project always exist."""
+    from legion.domain.organization import Organization
+    from legion.domain.project import Project
+
+    if fleet_repo.get_org(_DEFAULT_ORG_ID) is None:
+        fleet_repo.save_org(Organization(
+            id=_DEFAULT_ORG_ID, name="default", slug="default",
+        ))
+        logger.info("Seeded default organization")
+
+    if fleet_repo.get_project(_DEFAULT_PROJECT_ID) is None:
+        fleet_repo.save_project(Project(
+            id=_DEFAULT_PROJECT_ID, org_id=_DEFAULT_ORG_ID,
+            name="default", slug="default",
+        ))
+        logger.info("Seeded default project")
 
 
 def create_app(
@@ -66,6 +90,8 @@ def create_app(
             app.state.fleet_repo = SQLiteFleetRepository(engine)
             app.state.job_repo = SQLiteJobRepository(engine)
             app.state.session_repo = SQLiteSessionRepository(engine)
+
+        _seed_defaults(app.state.fleet_repo)
 
         if job_repo is not None:
             app.state.job_repo = job_repo
@@ -104,6 +130,7 @@ def create_app(
 
     app.include_router(health.router)
     app.include_router(organizations.router)
+    app.include_router(projects.router)
     app.include_router(agent_groups.router)
     app.include_router(agents.router)
     app.include_router(channel_mappings.router)

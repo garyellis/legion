@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from legion.api.deps import get_dispatch_service, get_session_repo
+from legion.api.deps import get_dispatch_service, get_fleet_repo, get_session_repo
 from legion.api.schemas import SessionCreate, SessionMessage
 from legion.domain.job import Job, JobType
 from legion.domain.session import Session, SessionStatus
 from legion.services.dispatch_service import DispatchService
+from legion.services.fleet_repository import FleetRepository
 from legion.services.session_repository import SessionRepository
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -17,8 +18,13 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_session(
     body: SessionCreate,
+    fleet_repo: FleetRepository = Depends(get_fleet_repo),
     session_repo: SessionRepository = Depends(get_session_repo),
 ) -> Session:
+    if fleet_repo.get_org(body.org_id) is None:
+        raise HTTPException(status_code=404, detail=f"Organization {body.org_id} not found")
+    if fleet_repo.get_agent_group(body.agent_group_id) is None:
+        raise HTTPException(status_code=404, detail=f"AgentGroup {body.agent_group_id} not found")
     session = Session(
         org_id=body.org_id,
         agent_group_id=body.agent_group_id,

@@ -9,9 +9,9 @@ How to work in this codebase without breaking it.
 Headless core consumed by multiple surfaces. Business logic is written once and exposed through CLI, Slack, HTTP API, and AI agents without duplication.
 
 ```
-              +--------+--------+--------+
-              |  cli/  | slack/ |  api/  |   SURFACES
-              +---+----+---+----+---+----+
+              +--------+--------+--------+----------+
+              |  cli/  | slack/ |  api/  | cli_dev/ |   SURFACES
+              +---+----+---+----+---+----+----+-----+
                   |    +---+--------+---+
                   |    |   agents/      |       AI
                   |    +-------+--------+
@@ -88,7 +88,7 @@ agents/    -> imports plumbing/, core/, domain/, services/
 surfaces   -> import from any layer below, never from each other
 ```
 
-Enforced by `uv run legion-cli architecture check` and `tests/test_dependency_direction.py`.
+Enforced by `uv run legion-dev architecture check` and `tests/test_dependency_direction.py`.
 
 ### Core stays framework-free
 
@@ -108,7 +108,7 @@ incident_service = IncidentService(
 
 ### Dependencies require ADRs
 
-Every new dependency requires a decision record in `docs/decisionlog/`. See `docs/decisionlog/0000-template.md` for the format.
+Every new dependency requires a decision record in `docs/decisionlog/`. Run `legion-dev adr create "<title>" --dependency` to generate the next ADR with the correct ID and template. See `docs/decisionlog/0000-template.md` for the full format reference.
 
 ---
 
@@ -137,15 +137,15 @@ uv sync --group dev
 uv run pytest
 
 # Architecture checks (run before committing)
-uv run legion-cli architecture check           # layer violations + banned imports
-uv run legion-cli architecture typecheck       # mypy
-uv run legion-cli architecture circular        # circular import detection
-uv run legion-cli architecture deadcode        # vulture dead code
-uv run legion-cli architecture unused-deps     # unused dependency detection
-uv run legion-cli architecture dangerous-calls # eval/exec/pickle restrictions
-uv run legion-cli architecture security        # bandit SAST
-uv run legion-cli architecture audit           # pip-audit CVE scan
-uv run legion-cli architecture secrets-check   # sensitive file detection
+uv run legion-dev architecture check           # layer violations + banned imports
+uv run legion-dev architecture typecheck       # mypy
+uv run legion-dev architecture circular        # circular import detection
+uv run legion-dev architecture deadcode        # vulture dead code
+uv run legion-dev architecture unused-deps     # unused dependency detection
+uv run legion-dev architecture dangerous-calls # eval/exec/pickle restrictions
+uv run legion-dev architecture security        # bandit SAST
+uv run legion-dev architecture audit           # pip-audit CVE scan
+uv run legion-dev architecture secrets-check   # sensitive file detection
 
 # Enable pre-commit hook (runs gate checks automatically)
 git config core.hooksPath .githooks
@@ -177,7 +177,7 @@ wt remove                                  # abandon a worktree
 1. wt switch -c feature/<name>                  # isolate
 2. implement changes                             # code
 3. uv run pytest                                 # test
-4. uv run legion-cli architecture check          # gate
+4. uv run legion-dev architecture check          # gate
 5. /review                                       # subagent code review (see below)
 6. git add <files> && git commit                 # commit
 7. wt merge main                                 # land on main
@@ -194,7 +194,7 @@ Every prompt should end with a **quality gate** — tell Claude to test, review,
 ```
 After implementation:
 1. Run uv run pytest
-2. Run uv run legion-cli architecture check
+2. Run uv run legion-dev architecture check
 3. Run /review and fix any findings
 4. Repeat steps 1-3 up to 3 passes until clean
 5. Commit and push the branch
@@ -217,7 +217,7 @@ wt switch -x claude -c feature/health-endpoints -- \
 
 After implementation:
 1. Run uv run pytest
-2. Run uv run legion-cli architecture check
+2. Run uv run legion-dev architecture check
 3. Run /review and fix any findings
 4. Repeat 1-3 up to 3 passes until clean
 5. Commit and push
@@ -251,7 +251,7 @@ wt switch -x claude -c feature/telemetry -- \
 
 After implementation:
 1. Run uv run pytest
-2. Run uv run legion-cli architecture check
+2. Run uv run legion-dev architecture check
 3. Run /review and fix any findings
 4. Repeat 1-3 up to 3 passes until clean
 5. Commit and push
@@ -269,7 +269,7 @@ wt switch -x claude -c feature/alembic -- \
 
 After implementation:
 1. Run uv run pytest
-2. Run uv run legion-cli architecture check
+2. Run uv run legion-dev architecture check
 3. Run /review and fix any findings
 4. Repeat 1-3 up to 3 passes until clean
 5. Commit and push
@@ -335,7 +335,7 @@ Pass-through (no service needed):
 
 ```python
 # cli/commands/cloudflare.py
-from legion.cli.registry import register_command
+from legion.plumbing.registry import register_command
 from legion.core.cloudflare.client import get_proxy_status
 
 @register_command("network", "proxy-status")
@@ -348,7 +348,7 @@ Orchestrated (service needed):
 
 ```python
 # cli/commands/failover.py
-from legion.cli.registry import register_command
+from legion.plumbing.registry import register_command
 from legion.services.failover_service import FailoverService
 
 @register_command("ops", "failover")

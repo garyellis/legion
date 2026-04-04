@@ -20,6 +20,8 @@ def upsert_prompt_config(
     body: PromptConfigUpsert,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
 ) -> PromptConfig:
+    if fleet_repo.get_agent_group(agent_group_id) is None:
+        raise HTTPException(status_code=404, detail=f"AgentGroup {agent_group_id} not found")
     existing = fleet_repo.get_prompt_config_by_agent_group(agent_group_id)
     if existing is not None:
         existing.system_prompt = body.system_prompt

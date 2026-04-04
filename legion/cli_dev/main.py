@@ -1,29 +1,28 @@
+from __future__ import annotations
+
 import importlib
 import pkgutil
 
 import typer
 
-from legion.plumbing.registry import get_registry
 from legion.plumbing.logging import LogOutput, setup_logging
+from legion.plumbing.registry import get_registry
 
 app = typer.Typer()
 
-def load_cli_commands() -> None:
-    from legion.cli import commands
+
+def load_cli_dev_commands() -> None:
+    from legion.cli_dev import commands
     for _, module_name, _ in pkgutil.iter_modules(commands.__path__):
-        importlib.import_module(f"legion.cli.commands.{module_name}")
+        importlib.import_module(f"legion.cli_dev.commands.{module_name}")
+
 
 def register_with_typer() -> None:
-    """Build Typer command tree from the registry.
-
-    Groups support dotted names for nesting: ``register_command("a.b", "c")``
-    produces ``legion-cli a b c``.
-    """
+    """Build Typer command tree from the registry."""
     group_apps: dict[str, typer.Typer] = {}
 
     for group, name, func in get_registry():
         parts = group.split(".")
-        # Walk / create the nested group chain
         for i, part in enumerate(parts):
             key = ".".join(parts[: i + 1])
             if key not in group_apps:
@@ -33,11 +32,13 @@ def register_with_typer() -> None:
                 parent.add_typer(group_apps[key], name=part)
         group_apps[group].command(name)(func)
 
+
 def main() -> None:
     setup_logging(level="WARNING", output=LogOutput.STDERR)
-    load_cli_commands()
+    load_cli_dev_commands()
     register_with_typer()
     app()
+
 
 if __name__ == "__main__":
     main()

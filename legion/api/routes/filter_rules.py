@@ -25,6 +25,10 @@ def create_filter_rule(
         raise HTTPException(
             status_code=422, detail=f"Invalid regex pattern: {exc}"
         ) from exc
+    if fleet_repo.get_channel_mapping(body.channel_mapping_id) is None:
+        raise HTTPException(
+            status_code=404, detail=f"ChannelMapping {body.channel_mapping_id} not found"
+        )
     rule = FilterRule(
         channel_mapping_id=body.channel_mapping_id,
         pattern=body.pattern,

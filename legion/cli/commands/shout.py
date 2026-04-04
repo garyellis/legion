@@ -1,4 +1,4 @@
-from legion.cli.registry import register_command
+from legion.plumbing.registry import register_command
 from legion.cli.views import print_message
 
 @register_command("text", "shout")
