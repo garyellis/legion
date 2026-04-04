@@ -1,4 +1,4 @@
-# ADR-0005: Move httpx from Dev to Runtime Dependency
+# ADR-0006: Move httpx from Dev to Runtime Dependency
 
 **Status**: ACCEPTED
 **Date**: 2026-04-04
