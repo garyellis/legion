@@ -8,7 +8,7 @@ Legion is an SRE and Platform Engineering agent fleet system. A control plane (F
 
 ## Architecture: Layer Model
 
-Imports flow **downward only**. No exceptions. Enforced by `legion-cli architecture check` and `tests/test_dependency_direction.py`.
+Imports flow **downward only**. No exceptions. Enforced by `legion-dev architecture check` and `tests/test_dependency_direction.py`.
 
 ```
 plumbing/    → imports NOTHING from legion (stdlib + external libs only)
@@ -20,7 +20,7 @@ agents/      → imports plumbing/, core/, domain/, services/
 surfaces     → import from any layer below, never from each other
 ```
 
-Surfaces: `cli/`, `slack/`, `api/`, `tui/`. Each is an independent entry point.
+Surfaces: `cli/`, `cli_dev/`, `slack/`, `api/`, `tui/`. Each is an independent entry point. `cli_dev/` is the developer harness (`legion-dev` command) — not shipped to end users.
 
 ## Do NOT
 
@@ -47,7 +47,7 @@ Surfaces: `cli/`, `slack/`, `api/`, `tui/`. Each is an independent entry point.
 
 ### ADR Format for Dependencies
 
-Create `docs/decisionlog/NNNN-short-title.md` (incrementing ID). See `docs/decisionlog/0000-template.md` for the format. Every dependency addition or removal gets an ADR.
+Run `legion-dev adr create "<title>"` to generate the next ADR with the correct ID and template. Add `--dependency` flag when the ADR is for a new package. See `docs/decisionlog/0000-template.md` for the full format reference. Every dependency addition or removal gets an ADR.
 
 ## Decision Tree: Where Code Goes
 
@@ -98,7 +98,7 @@ AI runtime infrastructure?                                    → agents/
 
 ```bash
 uv run pytest                              # all tests
-uv run legion-cli architecture check       # architecture check (CLI)
+uv run legion-dev architecture check       # architecture check (dev CLI)
 uv run pytest tests/test_dependency_direction.py  # architecture check (pytest)
 uv run pytest -k "test_domain"             # domain tests only
 ```
