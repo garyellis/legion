@@ -19,7 +19,8 @@ class TestOrganization:
 class TestAgentGroup:
     def test_creation_defaults(self):
         ag = AgentGroup(
-            org_id="org-1", name="US West", slug="us-west",
+            org_id="org-1", project_id="proj-1",
+            name="US West", slug="us-west",
             environment="prod", provider="eks",
         )
         assert ag.id
@@ -30,7 +31,8 @@ class TestAgentGroup:
 
     def test_execution_mode_override(self):
         ag = AgentGroup(
-            org_id="org-1", name="Dev", slug="dev",
+            org_id="org-1", project_id="proj-1",
+            name="Dev", slug="dev",
             environment="dev", provider="aks",
             execution_mode=ExecutionMode.AUTO_EXECUTE,
         )

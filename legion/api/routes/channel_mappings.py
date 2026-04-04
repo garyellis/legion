@@ -17,6 +17,10 @@ def create_channel_mapping(
     body: ChannelMappingCreate,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
 ) -> ChannelMapping:
+    if fleet_repo.get_org(body.org_id) is None:
+        raise HTTPException(status_code=404, detail=f"Organization {body.org_id} not found")
+    if fleet_repo.get_agent_group(body.agent_group_id) is None:
+        raise HTTPException(status_code=404, detail=f"AgentGroup {body.agent_group_id} not found")
     mapping = ChannelMapping(
         org_id=body.org_id,
         channel_id=body.channel_id,

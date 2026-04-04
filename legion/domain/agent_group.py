@@ -23,6 +23,7 @@ class AgentGroup(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     org_id: str
+    project_id: str
     name: str
     slug: str
     environment: str  # dev, staging, prod

@@ -47,7 +47,8 @@ class TestAgentGroupContract:
 
     def test_agent_group_round_trip(self) -> None:
         ag = AgentGroup(
-            id="ag-1", org_id="org-1", name="Prod SRE", slug="prod-sre",
+            id="ag-1", org_id="org-1", project_id="proj-1",
+            name="Prod SRE", slug="prod-sre",
             environment="prod", provider="eks",
             execution_mode=ExecutionMode.READ_ONLY,
             created_at=NOW, updated_at=NOW,
@@ -68,7 +69,8 @@ class TestAgentGroupContract:
     @pytest.mark.parametrize("mode", list(ExecutionMode))
     def test_all_execution_modes_parse(self, mode: ExecutionMode) -> None:
         ag = AgentGroup(
-            id="ag-1", org_id="org-1", name="Test", slug="test",
+            id="ag-1", org_id="org-1", project_id="proj-1",
+            name="Test", slug="test",
             environment="dev", provider="on-prem",
             execution_mode=mode,
             created_at=NOW, updated_at=NOW,

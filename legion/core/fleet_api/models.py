@@ -21,11 +21,23 @@ class OrgResponse(BaseModel):
     updated_at: datetime
 
 
+class ProjectResponse(BaseModel):
+    """Project as returned by the API."""
+
+    id: str
+    org_id: str
+    name: str
+    slug: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class AgentGroupResponse(BaseModel):
     """Agent group as returned by the API."""
 
     id: str
     org_id: str
+    project_id: str
     name: str
     slug: str
     environment: str

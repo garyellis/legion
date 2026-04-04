@@ -28,7 +28,8 @@ SAMPLE_ORG = OrgResponse(
 )
 
 SAMPLE_AGENT_GROUP = AgentGroupResponse(
-    id="ag-001", org_id="org-001", name="Production SRE", slug="prod-sre",
+    id="ag-001", org_id="org-001", project_id="proj-001",
+    name="Production SRE", slug="prod-sre",
     environment="prod", provider="eks", execution_mode="READ_ONLY",
     created_at=NOW, updated_at=NOW,
 )
@@ -165,7 +166,8 @@ class TestFleetAPIClient:
 
         client = FleetAPIClient(base_url="http://test:8000")
         result = client.create_agent_group(
-            org_id="org-001", name="Production SRE", slug="prod-sre",
+            org_id="org-001", project_id="proj-001",
+            name="Production SRE", slug="prod-sre",
             environment="prod", provider="eks",
         )
 
@@ -357,6 +359,7 @@ class TestAgentGroupCommands:
             [
                 "agent-group", "create",
                 "--org-id", "org-001",
+                "--project-id", "proj-001",
                 "--name", "Production SRE",
                 "--slug", "prod-sre",
                 "--environment", "prod",
@@ -365,7 +368,8 @@ class TestAgentGroupCommands:
         )
         assert result.exit_code == 0
         mock_client.create_agent_group.assert_called_once_with(
-            org_id="org-001", name="Production SRE", slug="prod-sre",
+            org_id="org-001", project_id="proj-001",
+            name="Production SRE", slug="prod-sre",
             environment="prod", provider="eks",
         )
 

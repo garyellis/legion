@@ -47,7 +47,8 @@ class TestOrganizationContract:
 class TestAgentGroupContract:
     def test_save_and_get(self, repo):
         ag = AgentGroup(
-            org_id="org-1", name="US West", slug="us-west",
+            org_id="org-1", project_id="proj-1",
+            name="US West", slug="us-west",
             environment="prod", provider="eks",
         )
         repo.save_agent_group(ag)
@@ -59,15 +60,18 @@ class TestAgentGroupContract:
 
     def test_list_by_org(self, repo):
         ag1 = AgentGroup(
-            org_id="org-1", name="A", slug="a",
+            org_id="org-1", project_id="proj-1",
+            name="A", slug="a",
             environment="dev", provider="aks",
         )
         ag2 = AgentGroup(
-            org_id="org-1", name="B", slug="b",
+            org_id="org-1", project_id="proj-1",
+            name="B", slug="b",
             environment="staging", provider="gke",
         )
         ag3 = AgentGroup(
-            org_id="org-2", name="C", slug="c",
+            org_id="org-2", project_id="proj-2",
+            name="C", slug="c",
             environment="prod", provider="eks",
         )
         repo.save_agent_group(ag1)
@@ -78,7 +82,8 @@ class TestAgentGroupContract:
 
     def test_delete(self, repo):
         ag = AgentGroup(
-            org_id="org-1", name="X", slug="x",
+            org_id="org-1", project_id="proj-1",
+            name="X", slug="x",
             environment="dev", provider="aks",
         )
         repo.save_agent_group(ag)
@@ -87,7 +92,8 @@ class TestAgentGroupContract:
 
     def test_execution_mode_persists(self, repo):
         ag = AgentGroup(
-            org_id="org-1", name="Dev", slug="dev",
+            org_id="org-1", project_id="proj-1",
+            name="Dev", slug="dev",
             environment="dev", provider="aks",
             execution_mode=ExecutionMode.AUTO_EXECUTE,
         )

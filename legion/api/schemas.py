@@ -17,12 +17,36 @@ class OrganizationCreate(BaseModel):
     slug: str
 
 
+class OrganizationUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+
+
+class ProjectCreate(BaseModel):
+    org_id: str
+    name: str
+    slug: str
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+
+
 class AgentGroupCreate(BaseModel):
     org_id: str
+    project_id: str
     name: str
     slug: str
     environment: str
     provider: str
+
+
+class AgentGroupUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+    environment: str | None = None
+    provider: str | None = None
 
 
 class ChannelMappingCreate(BaseModel):

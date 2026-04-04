@@ -7,7 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
-from legion.core.fleet_api.models import AgentGroupResponse, AgentResponse, OrgResponse
+from legion.core.fleet_api.models import AgentGroupResponse, AgentResponse, OrgResponse, ProjectResponse
 from legion.plumbing.exceptions import CoreError
 
 logger = logging.getLogger(__name__)
@@ -36,10 +36,19 @@ class FleetAPI(Protocol):
     def create_org(self, name: str, slug: str) -> OrgResponse: ...
     def get_org(self, org_id: str) -> OrgResponse: ...
     def list_orgs(self) -> list[OrgResponse]: ...
+    def update_org(self, org_id: str, **fields: str) -> OrgResponse: ...
+    def delete_org(self, org_id: str) -> None: ...
+
+    def create_project(self, org_id: str, name: str, slug: str) -> ProjectResponse: ...
+    def get_project(self, project_id: str) -> ProjectResponse: ...
+    def list_projects(self, org_id: str) -> list[ProjectResponse]: ...
+    def update_project(self, project_id: str, **fields: str) -> ProjectResponse: ...
+    def delete_project(self, project_id: str) -> None: ...
 
     def create_agent_group(
         self,
         org_id: str,
+        project_id: str,
         name: str,
         slug: str,
         environment: str = "dev",
@@ -47,6 +56,9 @@ class FleetAPI(Protocol):
     ) -> AgentGroupResponse: ...
     def get_agent_group(self, agent_group_id: str) -> AgentGroupResponse: ...
     def list_agent_groups(self, org_id: str) -> list[AgentGroupResponse]: ...
+    def list_agent_groups_by_project(self, project_id: str) -> list[AgentGroupResponse]: ...
+    def update_agent_group(self, agent_group_id: str, **fields: str) -> AgentGroupResponse: ...
+    def delete_agent_group(self, agent_group_id: str) -> None: ...
 
     def get_agent(self, agent_id: str) -> AgentResponse: ...
     def list_agents(self, agent_group_id: str) -> list[AgentResponse]: ...
@@ -82,11 +94,40 @@ class FleetAPIClient:
         data = self._get("/organizations/")
         return [OrgResponse.model_validate(item) for item in data]
 
+    def update_org(self, org_id: str, **fields: str) -> OrgResponse:
+        data = self._put(f"/organizations/{org_id}", json=fields)
+        return OrgResponse.model_validate(data)
+
+    def delete_org(self, org_id: str) -> None:
+        self._delete(f"/organizations/{org_id}")
+
+    # -- Projects -----------------------------------------------------------
+
+    def create_project(self, org_id: str, name: str, slug: str) -> ProjectResponse:
+        data = self._post("/projects/", json={"org_id": org_id, "name": name, "slug": slug})
+        return ProjectResponse.model_validate(data)
+
+    def get_project(self, project_id: str) -> ProjectResponse:
+        data = self._get(f"/projects/{project_id}")
+        return ProjectResponse.model_validate(data)
+
+    def list_projects(self, org_id: str) -> list[ProjectResponse]:
+        data = self._get("/projects/", params={"org_id": org_id})
+        return [ProjectResponse.model_validate(item) for item in data]
+
+    def update_project(self, project_id: str, **fields: str) -> ProjectResponse:
+        data = self._put(f"/projects/{project_id}", json=fields)
+        return ProjectResponse.model_validate(data)
+
+    def delete_project(self, project_id: str) -> None:
+        self._delete(f"/projects/{project_id}")
+
     # -- Agent Groups -------------------------------------------------------
 
     def create_agent_group(
         self,
         org_id: str,
+        project_id: str,
         name: str,
         slug: str,
         environment: str = "dev",
@@ -94,6 +135,7 @@ class FleetAPIClient:
     ) -> AgentGroupResponse:
         data = self._post("/agent-groups/", json={
             "org_id": org_id,
+            "project_id": project_id,
             "name": name,
             "slug": slug,
             "environment": environment,
@@ -108,6 +150,17 @@ class FleetAPIClient:
     def list_agent_groups(self, org_id: str) -> list[AgentGroupResponse]:
         data = self._get("/agent-groups/", params={"org_id": org_id})
         return [AgentGroupResponse.model_validate(item) for item in data]
+
+    def list_agent_groups_by_project(self, project_id: str) -> list[AgentGroupResponse]:
+        data = self._get("/agent-groups/", params={"project_id": project_id})
+        return [AgentGroupResponse.model_validate(item) for item in data]
+
+    def update_agent_group(self, agent_group_id: str, **fields: str) -> AgentGroupResponse:
+        data = self._put(f"/agent-groups/{agent_group_id}", json=fields)
+        return AgentGroupResponse.model_validate(data)
+
+    def delete_agent_group(self, agent_group_id: str) -> None:
+        self._delete(f"/agent-groups/{agent_group_id}")
 
     # -- Agents -------------------------------------------------------------
 
@@ -132,6 +185,17 @@ class FleetAPIClient:
         response = self._client.post(path, json=json)
         self._raise_for_status(response)
         return response.json()
+
+    def _put(self, path: str, json: dict[str, Any] | None = None) -> Any:
+        logger.debug("PUT %s", path)
+        response = self._client.put(path, json=json)
+        self._raise_for_status(response)
+        return response.json()
+
+    def _delete(self, path: str) -> None:
+        logger.debug("DELETE %s", path)
+        response = self._client.delete(path)
+        self._raise_for_status(response)
 
     def _raise_for_status(self, response: httpx.Response) -> None:
         if response.is_success:
