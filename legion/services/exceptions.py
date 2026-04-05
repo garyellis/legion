@@ -38,6 +38,22 @@ class AgentNotFoundError(ServiceError):
     """Referenced agent does not exist."""
 
 
+class AgentGroupNotFoundError(ServiceError):
+    """Referenced agent group does not exist."""
+
+
+class InvalidRegistrationTokenError(ServiceError):
+    """Registration token is invalid or no longer current."""
+
+
+class InvalidSessionTokenError(ServiceError):
+    """Session token is invalid or expired."""
+
+
+class SessionTokenMismatchError(ServiceError):
+    """Session token does not belong to the requested agent."""
+
+
 class SessionError(ServiceError):
     """Session lifecycle error."""
 

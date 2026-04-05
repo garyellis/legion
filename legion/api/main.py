@@ -26,6 +26,7 @@ from legion.api.routes import (
 )
 from legion.api.websocket import ConnectionManager, router as ws_router
 from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
+from legion.services.agent_session_repository import AgentSessionRepository
 from legion.services.dispatch_service import DispatchService
 from legion.services.filter_service import FilterService
 from legion.services.fleet_repository import FleetRepository
@@ -64,23 +65,31 @@ def create_app(
     fleet_repo: FleetRepository | None = None,
     job_repo: JobRepository | None = None,
     session_repo: SessionRepository | None = None,
+    agent_session_repo: AgentSessionRepository | None = None,
+    api_config: APIConfig | None = None,
     api_key: str = "",
 ) -> FastAPI:
     """App factory. Pass repos for testing; defaults to SQLite."""
 
-    provided_repos = (fleet_repo, job_repo, session_repo)
+    resolved_api_config = api_config or APIConfig(api_key=api_key)
+
+    provided_repos = (fleet_repo, job_repo, session_repo, agent_session_repo)
     if any(repo is not None for repo in provided_repos) and not all(
         repo is not None for repo in provided_repos
     ):
         raise ValueError(
-            "fleet_repo, job_repo, and session_repo must all be provided together",
+            "fleet_repo, job_repo, session_repo, and agent_session_repo must all be provided together",
         )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        app.state.api_config = resolved_api_config
         # Repos — use provided or create defaults
         if fleet_repo is not None:
             app.state.fleet_repo = fleet_repo
+            app.state.job_repo = job_repo
+            app.state.session_repo = session_repo
+            app.state.agent_session_repo = agent_session_repo
         else:
             from legion.plumbing.config.database import DatabaseConfig
             from legion.plumbing.database import create_all, create_engine
@@ -93,24 +102,23 @@ def create_app(
 
             from legion.services.fleet_repository import SQLiteFleetRepository
             from legion.services.job_repository import SQLiteJobRepository
+            from legion.services.agent_session_repository import SQLiteAgentSessionRepository
             from legion.services.session_repository import SQLiteSessionRepository
 
             app.state.fleet_repo = SQLiteFleetRepository(engine)
             app.state.job_repo = SQLiteJobRepository(engine)
             app.state.session_repo = SQLiteSessionRepository(engine)
+            app.state.agent_session_repo = SQLiteAgentSessionRepository(engine)
 
         _seed_defaults(app.state.fleet_repo)
-
-        if job_repo is not None:
-            app.state.job_repo = job_repo
-        if session_repo is not None:
-            app.state.session_repo = session_repo
 
         # Services
         app.state.dispatch_service = DispatchService(
             app.state.fleet_repo,
             app.state.job_repo,
             app.state.session_repo,
+            app.state.agent_session_repo,
+            agent_session_token_ttl_seconds=resolved_api_config.agent_session_token_ttl_seconds,
         )
         app.state.session_service = SessionService(
             app.state.session_repo, app.state.fleet_repo,
@@ -127,10 +135,10 @@ def create_app(
 
     app = FastAPI(title="Legion API", lifespan=lifespan)
 
-    if api_key:
+    if resolved_api_config.api_key:
         from legion.api.middleware import APIKeyMiddleware
 
-        app.add_middleware(APIKeyMiddleware, api_key=api_key)
+        app.add_middleware(APIKeyMiddleware, api_key=resolved_api_config.api_key)
 
     from legion.api.middleware import RequestMetricsMiddleware
 
@@ -163,7 +171,7 @@ def main() -> None:
         fmt=LogFormat[api_config.log_format],
         quiet_loggers=["uvicorn", "uvicorn.access"],
     )
-    app = create_app(api_key=api_config.api_key)
+    app = create_app(api_config=api_config)
     uvicorn.run(app, host=api_config.host, port=api_config.port)
 
 

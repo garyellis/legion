@@ -14,6 +14,7 @@ from legion.domain.job import JobType
 from legion.plumbing import telemetry
 from legion.plumbing.database import create_all, create_engine
 from legion.plumbing.plugins import ToolMeta, get_tool_meta, tool
+from legion.services.agent_session_repository import SQLiteAgentSessionRepository
 from legion.services.dispatch_service import DispatchService
 from legion.services.fleet_repository import SQLiteFleetRepository
 from legion.services.job_repository import SQLiteJobRepository
@@ -49,6 +50,7 @@ def _make_repos() -> dict[str, object]:
         "fleet_repo": SQLiteFleetRepository(engine),
         "job_repo": SQLiteJobRepository(engine),
         "session_repo": SQLiteSessionRepository(engine),
+        "agent_session_repo": SQLiteAgentSessionRepository(engine),
     }
 
 

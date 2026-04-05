@@ -66,6 +66,9 @@ class FleetRepository(ABC):
     def get_agent_group(self, ag_id: str) -> Optional[AgentGroup]: ...
 
     @abstractmethod
+    def get_agent_group_by_registration_token_hash(self, token_hash: str) -> Optional[AgentGroup]: ...
+
+    @abstractmethod
     def list_agent_groups(self, org_id: str) -> list[AgentGroup]: ...
 
     @abstractmethod
@@ -169,6 +172,8 @@ class AgentGroupRow(Base):
     environment = Column(String, nullable=False)
     provider = Column(String, nullable=False)
     execution_mode = Column(String, nullable=False, default=ExecutionMode.READ_ONLY.value)
+    registration_token_hash = Column(String, nullable=True)
+    registration_token_rotated_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
 
@@ -322,6 +327,8 @@ class SQLiteFleetRepository(FleetRepository):
             row.environment = ag.environment
             row.provider = ag.provider
             row.execution_mode = ag.execution_mode.value
+            row.registration_token_hash = ag.registration_token_hash
+            row.registration_token_rotated_at = ag.registration_token_rotated_at
             row.created_at = ag.created_at
             row.updated_at = ag.updated_at
             session.commit()
@@ -329,6 +336,17 @@ class SQLiteFleetRepository(FleetRepository):
     def get_agent_group(self, ag_id: str) -> Optional[AgentGroup]:
         with self._session_factory() as session:
             row = session.get(AgentGroupRow, ag_id)
+            if row is None:
+                return None
+            return self._ag_to_domain(row)
+
+    def get_agent_group_by_registration_token_hash(self, token_hash: str) -> Optional[AgentGroup]:
+        with self._session_factory() as session:
+            row = (
+                session.query(AgentGroupRow)
+                .filter(AgentGroupRow.registration_token_hash == token_hash)
+                .first()
+            )
             if row is None:
                 return None
             return self._ag_to_domain(row)
@@ -458,6 +476,8 @@ class SQLiteFleetRepository(FleetRepository):
             environment=row.environment,
             provider=row.provider,
             execution_mode=ExecutionMode(row.execution_mode),
+            registration_token_hash=row.registration_token_hash,
+            registration_token_rotated_at=ensure(row.registration_token_rotated_at),
             created_at=ensure(row.created_at),
             updated_at=ensure(row.updated_at),
         )

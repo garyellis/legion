@@ -9,6 +9,7 @@ from legion.domain.filter_rule import FilterAction, FilterRule
 from legion.domain.organization import Organization
 from legion.domain.prompt_config import PromptConfig
 from legion.plumbing.database import create_all, create_engine
+from legion.plumbing.tokens import hash_token
 from legion.services.fleet_repository import SQLiteFleetRepository
 
 
@@ -101,6 +102,32 @@ class TestAgentGroupContract:
         loaded = repo.get_agent_group(ag.id)
         assert loaded is not None
         assert loaded.execution_mode == ExecutionMode.AUTO_EXECUTE
+
+    def test_registration_token_fields_persist(self, repo):
+        token = "registration-token"
+        ag = AgentGroup(
+            org_id="org-1", project_id="proj-1",
+            name="Dev", slug="dev",
+            environment="dev", provider="aks",
+            registration_token_hash=hash_token(token),
+        )
+        repo.save_agent_group(ag)
+        loaded = repo.get_agent_group(ag.id)
+        assert loaded is not None
+        assert loaded.registration_token_hash == hash_token(token)
+
+    def test_lookup_by_registration_token_hash(self, repo):
+        token = "registration-token"
+        ag = AgentGroup(
+            org_id="org-1", project_id="proj-1",
+            name="Dev", slug="dev",
+            environment="dev", provider="aks",
+            registration_token_hash=hash_token(token),
+        )
+        repo.save_agent_group(ag)
+        loaded = repo.get_agent_group_by_registration_token_hash(hash_token(token))
+        assert loaded is not None
+        assert loaded.id == ag.id
 
 
 class TestAgentContract:

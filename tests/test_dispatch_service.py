@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from legion.domain.agent import AgentStatus
+from legion.domain.agent_group import AgentGroup
 from legion.domain.job import JobStatus, JobType
 from legion.domain.session import Session
 from legion.plumbing.database import create_all, create_engine
 from legion.services.dispatch_service import DispatchService
-from legion.services.exceptions import AgentNotFoundError, DispatchError
+from legion.services.exceptions import (
+    AgentGroupNotFoundError,
+    AgentNotFoundError,
+    DispatchError,
+    InvalidRegistrationTokenError,
+)
 from legion.services.fleet_repository import SQLiteFleetRepository
 from legion.services.job_repository import SQLiteJobRepository
+from legion.services.agent_session_repository import SQLiteAgentSessionRepository
 from legion.services.session_repository import SQLiteSessionRepository
 
 
@@ -38,8 +47,13 @@ def session_repo(_engine):
 
 
 @pytest.fixture()
-def service(fleet_repo, job_repo, session_repo):
-    return DispatchService(fleet_repo, job_repo, session_repo)
+def agent_session_repo(_engine):
+    return SQLiteAgentSessionRepository(_engine)
+
+
+@pytest.fixture()
+def service(fleet_repo, job_repo, session_repo, agent_session_repo):
+    return DispatchService(fleet_repo, job_repo, session_repo, agent_session_repo)
 
 
 class TestDispatchService:
@@ -246,3 +260,107 @@ class TestDispatchService:
 
         assert calls == ["ag-1"]
         assert agent.status == AgentStatus.IDLE
+
+    def test_rotate_agent_group_registration_token(self, service, fleet_repo):
+        fleet_repo.save_agent_group(
+            AgentGroup(
+                id="ag-1",
+                org_id="org-1",
+                project_id="proj-1",
+                name="group",
+                slug="group",
+                environment="dev",
+                provider="aks",
+            ),
+        )
+
+        result = service.rotate_agent_group_registration_token("ag-1")
+
+        assert result.agent_group.id == "ag-1"
+        assert result.registration_token
+        assert fleet_repo.get_agent_group("ag-1").registration_token_hash is not None
+
+    def test_rotate_agent_group_registration_token_missing_group(self, service):
+        with pytest.raises(AgentGroupNotFoundError):
+            service.rotate_agent_group_registration_token("missing")
+
+    def test_register_agent_with_token(self, service, fleet_repo):
+        fleet_repo.save_agent_group(
+            AgentGroup(
+                id="ag-1",
+                org_id="org-1",
+                project_id="proj-1",
+                name="group",
+                slug="group",
+                environment="dev",
+                provider="aks",
+            ),
+        )
+        rotation = service.rotate_agent_group_registration_token("ag-1")
+
+        result = service.register_agent_with_token(rotation.registration_token, "agent-01", ["k8s"])
+
+        assert result.agent.name == "agent-01"
+        assert result.agent.status == AgentStatus.IDLE
+        assert result.session_token
+        assert result.session_token_expires_at is not None
+        assert fleet_repo.list_agents("ag-1")[0].id == result.agent.id
+
+    def test_register_agent_with_token_reuses_existing_agent_id(self, service, fleet_repo):
+        fleet_repo.save_agent_group(
+            AgentGroup(
+                id="ag-1",
+                org_id="org-1",
+                project_id="proj-1",
+                name="group",
+                slug="group",
+                environment="dev",
+                provider="aks",
+            ),
+        )
+        rotation = service.rotate_agent_group_registration_token("ag-1")
+
+        first = service.register_agent_with_token(rotation.registration_token, "agent-01", ["k8s"])
+        second = service.register_agent_with_token(rotation.registration_token, "agent-01", ["logs"])
+
+        assert second.agent.id == first.agent.id
+        assert second.agent.capabilities == ["logs"]
+        assert len(fleet_repo.list_agents("ag-1")) == 1
+
+    def test_register_agent_with_token_rejects_invalid_token(self, service):
+        with pytest.raises(InvalidRegistrationTokenError):
+            service.register_agent_with_token("bad-token", "agent-01", [])
+
+    def test_register_agent_with_token_uses_configured_session_ttl(
+        self,
+        fleet_repo,
+        job_repo,
+        session_repo,
+        agent_session_repo,
+    ):
+        service = DispatchService(
+            fleet_repo,
+            job_repo,
+            session_repo,
+            agent_session_repo,
+            agent_session_token_ttl_seconds=90,
+        )
+        fleet_repo.save_agent_group(
+            AgentGroup(
+                id="ag-1",
+                org_id="org-1",
+                project_id="proj-1",
+                name="group",
+                slug="group",
+                environment="dev",
+                provider="aks",
+            ),
+        )
+        rotation = service.rotate_agent_group_registration_token("ag-1")
+
+        before = datetime.now(timezone.utc)
+        result = service.register_agent_with_token(rotation.registration_token, "agent-01", ["k8s"])
+        after = datetime.now(timezone.utc)
+
+        assert before + timedelta(seconds=90) <= result.session_token_expires_at + timedelta(seconds=1)
+        assert result.session_token_expires_at <= after + timedelta(seconds=91)

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from legion.api.main import create_app
 from legion.plumbing.database import create_all, create_engine
+from legion.services.agent_session_repository import SQLiteAgentSessionRepository
 from legion.services.fleet_repository import SQLiteFleetRepository
 from legion.services.job_repository import SQLiteJobRepository
 from legion.services.session_repository import SQLiteSessionRepository
@@ -20,6 +21,7 @@ def _make_repos():
         "fleet_repo": SQLiteFleetRepository(engine),
         "job_repo": SQLiteJobRepository(engine),
         "session_repo": SQLiteSessionRepository(engine),
+        "agent_session_repo": SQLiteAgentSessionRepository(engine),
     }
 
 
@@ -62,3 +64,16 @@ class TestAPIKeyAuth:
         with _make_client(api_key=API_KEY) as client:
             resp = client.get("/health/ready")
             assert resp.status_code == 200
+
+    def test_agents_register_bypasses_api_key_middleware(self):
+        with _make_client(api_key=API_KEY) as client:
+            resp = client.post(
+                "/agents/register",
+                json={
+                    "registration_token": "bogus-token",
+                    "name": "agent-1",
+                    "capabilities": [],
+                },
+            )
+            assert resp.status_code == 401
+            assert resp.json() == {"detail": "Invalid registration token"}

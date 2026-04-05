@@ -10,6 +10,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from legion.domain.agent import Agent
 from legion.domain.job import Job
 from legion.services.dispatch_service import DispatchService
+from legion.services.exceptions import AgentNotFoundError, InvalidSessionTokenError, SessionTokenMismatchError
 from legion.services.fleet_repository import FleetRepository
 from legion.services.job_repository import JobRepository
 
@@ -53,6 +54,15 @@ class ConnectionManager:
         return agent_id in self._connections
 
 
+def _extract_bearer_token(websocket: WebSocket) -> str | None:
+    authorization = websocket.headers.get("authorization", "")
+    prefix = "bearer "
+    if not authorization.lower().startswith(prefix):
+        return None
+    token = authorization[len(prefix):].strip()
+    return token or None
+
+
 @router.websocket("/ws/agents/{agent_id}")
 async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
     fleet_repo: FleetRepository = websocket.app.state.fleet_repo
@@ -60,19 +70,24 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
     dispatch_service: DispatchService = websocket.app.state.dispatch_service
     connection_manager: ConnectionManager = websocket.app.state.connection_manager
 
+    session_token = _extract_bearer_token(websocket)
+    if session_token is None:
+        await websocket.close(code=4001)
+        return
+
+    try:
+        agent = dispatch_service.authenticate_agent_session(agent_id, session_token)
+    except SessionTokenMismatchError:
+        await websocket.close(code=4003)
+        return
+    except (InvalidSessionTokenError, AgentNotFoundError):
+        await websocket.close(code=4001)
+        return
+
     await connection_manager.connect(agent_id, websocket)
 
-    # Ensure agent exists and mark IDLE
-    agent = fleet_repo.get_agent(agent_id)
-    if agent is None:
-        agent = dispatch_service.register_agent(
-            agent_group_id="default", name=agent_id,
-        )
-        agent.id = agent_id
-        fleet_repo.save_agent(agent)
-    else:
-        agent.go_idle()
-        fleet_repo.save_agent(agent)
+    agent.go_idle()
+    fleet_repo.save_agent(agent)
 
     logger.info("Agent connected: %s", agent_id)
 
@@ -94,10 +109,10 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
             elif msg_type == "job_result":
                 dispatch_service.complete_job(data["job_id"], data["result"])
                 # Check for pending jobs
-                agent = fleet_repo.get_agent(agent_id)
-                if agent is not None:
+                connected_agent = fleet_repo.get_agent(agent_id)
+                if connected_agent is not None:
                     dispatched = dispatch_service.dispatch_pending(
-                        agent.agent_group_id,
+                        connected_agent.agent_group_id,
                     )
                     for d_job, d_agent in dispatched:
                         await connection_manager.send_job_to_agent(d_job, d_agent)
@@ -105,10 +120,10 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
             elif msg_type == "job_failed":
                 dispatch_service.fail_job(data["job_id"], data.get("error", ""))
                 # Check for pending jobs
-                agent = fleet_repo.get_agent(agent_id)
-                if agent is not None:
+                connected_agent = fleet_repo.get_agent(agent_id)
+                if connected_agent is not None:
                     dispatched = dispatch_service.dispatch_pending(
-                        agent.agent_group_id,
+                        connected_agent.agent_group_id,
                     )
                     for d_job, d_agent in dispatched:
                         await connection_manager.send_job_to_agent(d_job, d_agent)
@@ -117,9 +132,9 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
         pass
     finally:
         await connection_manager.disconnect(agent_id)
-        agent = fleet_repo.get_agent(agent_id)
-        if agent is not None:
-            agent.go_offline()
-            fleet_repo.save_agent(agent)
+        disconnected_agent = fleet_repo.get_agent(agent_id)
+        if disconnected_agent is not None:
+            disconnected_agent.go_offline()
+            fleet_repo.save_agent(disconnected_agent)
         dispatch_service.reassign_disconnected(agent_id)
         logger.info("Agent disconnected: %s", agent_id)

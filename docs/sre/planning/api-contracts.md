@@ -231,7 +231,7 @@ Registration and connection are separate steps. The agent registers via REST fir
   "session_token_expires_at": "2026-03-29T12:30:00Z",
   "config": {
     "heartbeat_interval_seconds": 30,
-    "websocket_url": "wss://<host>/ws/agents/<agent_id>"
+    "websocket_path": "/ws/agents/<agent_id>"
   }
 }
 ```
@@ -240,7 +240,7 @@ Registration and connection are separate steps. The agent registers via REST fir
 1. Agent boots with a **registration token** (long-lived, scoped to an agent group, issued via CLI or API)
 2. Agent calls `POST /agents/register` with the registration token + its metadata
 3. Server validates the token, creates/updates the Agent record, returns an `agent_id` and a **short-lived session token**
-4. Agent uses the session token to connect to the WebSocket (see 3.1)
+4. Agent combines its configured control-plane base URL with `config.websocket_path`, then uses the session token to connect to the WebSocket (see 3.1)
 
 **Re-registration**: If an agent restarts, it calls `/agents/register` again with the same registration token. The server can match by name + agent group to reuse the existing `agent_id` (avoiding orphaned records), or issue a new one.
 

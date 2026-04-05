@@ -6,8 +6,11 @@ These thin *Create / *Upsert schemas handle POST/PUT request bodies.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from datetime import datetime
 
+from pydantic import BaseModel, Field
+
+from legion.domain.agent import Agent
 from legion.domain.channel_mapping import ChannelMode
 from legion.domain.filter_rule import FilterAction
 
@@ -47,6 +50,30 @@ class AgentGroupUpdate(BaseModel):
     slug: str | None = None
     environment: str | None = None
     provider: str | None = None
+
+
+class AgentGroupTokenResponse(BaseModel):
+    agent_group_id: str
+    registration_token: str
+    registration_token_rotated_at: datetime
+
+
+class AgentRegister(BaseModel):
+    registration_token: str
+    name: str
+    capabilities: list[str] = Field(default_factory=list)
+
+
+class AgentConnectionConfig(BaseModel):
+    heartbeat_interval_seconds: int
+    websocket_path: str
+
+
+class AgentRegistrationResponse(BaseModel):
+    agent: Agent
+    session_token: str
+    session_token_expires_at: datetime
+    config: AgentConnectionConfig
 
 
 class ChannelMappingCreate(BaseModel):

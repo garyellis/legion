@@ -423,7 +423,7 @@ Agent                                     Control Plane
   │                                            │  → validate token
   │                                            │  → create/update Agent record
   │←── 201 { agent_id, session_token,  ───────│  → session_token TTL: 1h
-  │          config, websocket_url }           │
+  │          config, websocket_path }          │
 ```
 
 **Step 2: WebSocket Connection (WSS)**

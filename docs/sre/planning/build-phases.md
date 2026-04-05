@@ -26,6 +26,20 @@
 
 **Testable with**: `uv run pytest`, `legion-cli fleet ...`, `curl /metrics`, `curl -H "X-API-Key: ..." /orgs`
 
+### Current Status
+
+Sprint A is partially implemented. The repo already has the `AgentGroup` rename, `execution_mode`, fleet CRUD CLI foundation, health endpoints, API key middleware, `/metrics`, and initial telemetry/plugin scaffolding. The remaining work is now batched into local feature briefs so it can be parallelized safely with worktrees and delegated agents:
+
+1. `Phase 1 job and message foundation`
+2. `Phase 1 Alembic adoption`
+3. `Phase 1 observability and plugin closeout`
+
+Execution order:
+
+1. Finish `Phase 1 job and message foundation` first because it still locks Sprint A schema direction.
+2. Run `Phase 1 observability and plugin closeout` in parallel where it does not depend on migration timing.
+3. Start `Phase 1 Alembic adoption` only after the remaining schema changes are settled enough to define the initial migration path.
+
 ### Work Items
 
 ```
@@ -80,6 +94,24 @@
 8. **Alembic database migrations** (Decision 29): Initialize Alembic, generate initial migration from existing ORM schema, wire into app startup. Replace `create_all()` with `alembic upgrade head`. The AgentGroup rename in item 1 becomes the second migration — proving the migration workflow from day one.
 9. **API key authentication** (Decision 30): Simple `X-API-Key` header middleware on all routes except `/health`, `/health/ready`, and `/ws/agents/`. Configured via `LEGION_API_KEY` env var. When not set, auth is disabled (dev mode). When set, all requests must include the header. This is not RBAC — it's a shared secret gate to prevent accidental exposure. RBAC comes later.
 10. **Tests**: Updated repository tests, CLI integration tests, dependency direction enforcement, telemetry unit tests, auth middleware tests, message repository tests.
+
+### Remaining Work Breakdown
+
+- **Already landed or mostly landed**
+  - AgentGroup rename and `execution_mode`
+  - SQLAlchemy-first repository direction with SQLite-backed tests
+  - `legion-cli fleet` CRUD foundation and agent status views
+  - `/health`, `/health/ready`, `/metrics`
+  - `X-API-Key` middleware
+  - `plumbing/telemetry.py` and `plumbing/plugins.py` scaffolding
+- **Still pending**
+  - Job schema additions (`event_id`, `required_capabilities`, extensible lifecycle/types)
+  - Message timeline foundation (`domain/message.py`, repository, persistence)
+  - Alembic setup and startup migration wiring
+  - Observability/plugin closeout work to match the planning docs
+- **Handoff mechanism**
+  - Use `uv run legion-dev feature show "<title>"` to inspect a local brief.
+  - Use `uv run legion-dev feature handoff "<title>"` to emit the deterministic prompt for a worktree, sub-agent, or external coding agent.
 
 ### What to Watch For
 

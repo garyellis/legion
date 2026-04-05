@@ -13,7 +13,14 @@ from starlette.types import ASGIApp
 
 from legion.plumbing import telemetry
 
-_PUBLIC_PATHS = frozenset({"/health", "/health/ready", "/docs", "/metrics", "/openapi.json"})
+_PUBLIC_PATHS = frozenset({
+    "/health",
+    "/health/ready",
+    "/docs",
+    "/metrics",
+    "/openapi.json",
+    "/agents/register",
+})
 _PUBLIC_PREFIXES = ("/ws/",)
 
 

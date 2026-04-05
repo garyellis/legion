@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from legion.api.deps import get_fleet_repo
-from legion.api.schemas import AgentGroupCreate, AgentGroupUpdate
+from legion.api.deps import get_dispatch_service, get_fleet_repo
+from legion.api.schemas import AgentGroupCreate, AgentGroupTokenResponse, AgentGroupUpdate
 from legion.domain.agent_group import AgentGroup
+from legion.services.dispatch_service import DispatchService
 from legion.services.fleet_repository import FleetRepository
 
 router = APIRouter(prefix="/agent-groups", tags=["agent-groups"])
@@ -85,3 +86,18 @@ def delete_agent_group(
 ) -> None:
     if not fleet_repo.delete_agent_group(ag_id):
         raise HTTPException(status_code=404, detail="AgentGroup not found")
+
+
+@router.post("/{ag_id}/token", status_code=status.HTTP_201_CREATED)
+def rotate_agent_group_token(
+    ag_id: str,
+    dispatch_service: DispatchService = Depends(get_dispatch_service),
+) -> AgentGroupTokenResponse:
+    result = dispatch_service.rotate_agent_group_registration_token(ag_id)
+    rotated_at = result.agent_group.registration_token_rotated_at
+    assert rotated_at is not None
+    return AgentGroupTokenResponse(
+        agent_group_id=result.agent_group.id,
+        registration_token=result.registration_token,
+        registration_token_rotated_at=rotated_at,
+    )

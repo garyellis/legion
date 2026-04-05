@@ -17,3 +17,5 @@ class APIConfig(LegionConfig):
     log_level: str = "INFO"
     log_format: str = "JSON"
     api_key: str = ""
+    agent_session_token_ttl_seconds: int = 3600
+    agent_heartbeat_interval_seconds: int = 30

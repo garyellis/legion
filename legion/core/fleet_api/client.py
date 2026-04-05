@@ -7,7 +7,14 @@ from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
-from legion.core.fleet_api.models import AgentGroupResponse, AgentResponse, OrgResponse, ProjectResponse
+from legion.core.fleet_api.models import (
+    AgentGroupResponse,
+    AgentGroupTokenResponse,
+    AgentRegistrationResponse,
+    AgentResponse,
+    OrgResponse,
+    ProjectResponse,
+)
 from legion.plumbing.exceptions import CoreError
 
 logger = logging.getLogger(__name__)
@@ -59,9 +66,16 @@ class FleetAPI(Protocol):
     def list_agent_groups_by_project(self, project_id: str) -> list[AgentGroupResponse]: ...
     def update_agent_group(self, agent_group_id: str, **fields: str) -> AgentGroupResponse: ...
     def delete_agent_group(self, agent_group_id: str) -> None: ...
+    def rotate_agent_group_registration_token(self, agent_group_id: str) -> AgentGroupTokenResponse: ...
 
     def get_agent(self, agent_id: str) -> AgentResponse: ...
     def list_agents(self, agent_group_id: str) -> list[AgentResponse]: ...
+    def register_agent(
+        self,
+        registration_token: str,
+        name: str,
+        capabilities: list[str] | None = None,
+    ) -> AgentRegistrationResponse: ...
 
 
 class FleetAPIClient:
@@ -162,6 +176,10 @@ class FleetAPIClient:
     def delete_agent_group(self, agent_group_id: str) -> None:
         self._delete(f"/agent-groups/{agent_group_id}")
 
+    def rotate_agent_group_registration_token(self, agent_group_id: str) -> AgentGroupTokenResponse:
+        data = self._post(f"/agent-groups/{agent_group_id}/token")
+        return AgentGroupTokenResponse.model_validate(data)
+
     # -- Agents -------------------------------------------------------------
 
     def get_agent(self, agent_id: str) -> AgentResponse:
@@ -171,6 +189,22 @@ class FleetAPIClient:
     def list_agents(self, agent_group_id: str) -> list[AgentResponse]:
         data = self._get("/agents/", params={"agent_group_id": agent_group_id})
         return [AgentResponse.model_validate(item) for item in data]
+
+    def register_agent(
+        self,
+        registration_token: str,
+        name: str,
+        capabilities: list[str] | None = None,
+    ) -> AgentRegistrationResponse:
+        data = self._post(
+            "/agents/register",
+            json={
+                "registration_token": registration_token,
+                "name": name,
+                "capabilities": capabilities or [],
+            },
+        )
+        return AgentRegistrationResponse.model_validate(data)
 
     # -- Transport ----------------------------------------------------------
 

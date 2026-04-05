@@ -11,7 +11,14 @@ import typer
 from typer.testing import CliRunner
 
 from legion.core.fleet_api.client import FleetAPIClient, FleetAPIError
-from legion.core.fleet_api.models import AgentGroupResponse, AgentResponse, OrgResponse
+from legion.core.fleet_api.models import (
+    AgentConnectionConfig,
+    AgentGroupResponse,
+    AgentGroupTokenResponse,
+    AgentRegistrationResponse,
+    AgentResponse,
+    OrgResponse,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -34,6 +41,12 @@ SAMPLE_AGENT_GROUP = AgentGroupResponse(
     created_at=NOW, updated_at=NOW,
 )
 
+SAMPLE_AGENT_GROUP_TOKEN = AgentGroupTokenResponse(
+    agent_group_id="ag-001",
+    registration_token="reg-token-123",
+    registration_token_rotated_at=NOW,
+)
+
 SAMPLE_AGENTS = [
     AgentResponse(
         id="agent-001", agent_group_id="ag-001", name="sre-agent-1",
@@ -51,6 +64,16 @@ SAMPLE_AGENTS = [
         last_heartbeat=None, created_at=NOW, updated_at=NOW,
     ),
 ]
+
+SAMPLE_AGENT_REGISTRATION = AgentRegistrationResponse(
+    agent=SAMPLE_AGENTS[0],
+    session_token="session-token-123",
+    session_token_expires_at=NOW,
+    config=AgentConnectionConfig(
+        heartbeat_interval_seconds=30,
+        websocket_path="/ws/agents/agent-001",
+    ),
+)
 
 
 def _get_app():
@@ -175,6 +198,41 @@ class TestFleetAPIClient:
         assert result.environment == "prod"
 
     @patch("legion.core.fleet_api.client.httpx.Client")
+    def test_rotate_agent_group_registration_token(self, mock_httpx_cls):
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.json.return_value = SAMPLE_AGENT_GROUP_TOKEN.model_dump(mode="json")
+        mock_httpx_cls.return_value.post.return_value = mock_response
+
+        client = FleetAPIClient(base_url="http://test:8000")
+        result = client.rotate_agent_group_registration_token("ag-001")
+
+        assert isinstance(result, AgentGroupTokenResponse)
+        assert result.registration_token == "reg-token-123"
+        mock_httpx_cls.return_value.post.assert_called_once_with("/agent-groups/ag-001/token", json=None)
+
+    @patch("legion.core.fleet_api.client.httpx.Client")
+    def test_register_agent(self, mock_httpx_cls):
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.json.return_value = SAMPLE_AGENT_REGISTRATION.model_dump(mode="json")
+        mock_httpx_cls.return_value.post.return_value = mock_response
+
+        client = FleetAPIClient(base_url="http://test:8000")
+        result = client.register_agent("reg-token-123", "sre-agent-1", ["k8s"])
+
+        assert isinstance(result, AgentRegistrationResponse)
+        assert result.session_token == "session-token-123"
+        mock_httpx_cls.return_value.post.assert_called_once_with(
+            "/agents/register",
+            json={
+                "registration_token": "reg-token-123",
+                "name": "sre-agent-1",
+                "capabilities": ["k8s"],
+            },
+        )
+
+    @patch("legion.core.fleet_api.client.httpx.Client")
     def test_get_org(self, mock_httpx_cls):
         mock_response = MagicMock()
         mock_response.is_success = True
@@ -265,6 +323,10 @@ class TestFleetViews:
     def test_display_created_agent_group(self):
         from legion.cli.views.fleet import display_created_agent_group
         display_created_agent_group(SAMPLE_AGENT_GROUP)
+
+    def test_display_agent_group_token(self):
+        from legion.cli.views.fleet import display_agent_group_token
+        display_agent_group_token(SAMPLE_AGENT_GROUP_TOKEN)
 
     def test_display_agent_group_list(self):
         from legion.cli.views.fleet import display_agent_group_list
@@ -385,6 +447,19 @@ class TestAgentGroupCommands:
         )
         assert result.exit_code == 0
         mock_client.list_agent_groups.assert_called_once_with("org-001")
+
+    @patch("legion.cli.commands.fleet._build_client")
+    def test_agent_group_token(self, mock_build):
+        mock_client = MagicMock(spec=FleetAPIClient)
+        mock_client.rotate_agent_group_registration_token.return_value = SAMPLE_AGENT_GROUP_TOKEN
+        mock_build.return_value = _mock_client_ctx(mock_client)
+
+        app = _get_app()
+        result = runner.invoke(
+            app, ["agent-group", "token", "--id", "ag-001"]
+        )
+        assert result.exit_code == 0
+        mock_client.rotate_agent_group_registration_token.assert_called_once_with("ag-001")
 
 
 class TestAgentCommands:

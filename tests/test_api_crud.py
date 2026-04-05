@@ -10,6 +10,7 @@ from legion.domain.agent import Agent, AgentStatus
 from legion.domain.job import Job, JobStatus, JobType
 from legion.domain.session import Session
 from legion.plumbing.database import create_all, create_engine
+from legion.services.agent_session_repository import SQLiteAgentSessionRepository
 from legion.services.fleet_repository import SQLiteFleetRepository
 from legion.services.job_repository import SQLiteJobRepository
 from legion.services.session_repository import SQLiteSessionRepository
@@ -40,11 +41,17 @@ def session_repo(_engine):
 
 
 @pytest.fixture()
-def app(fleet_repo, job_repo, session_repo):
+def agent_session_repo(_engine):
+    return SQLiteAgentSessionRepository(_engine)
+
+
+@pytest.fixture()
+def app(fleet_repo, job_repo, session_repo, agent_session_repo):
     return create_app(
         fleet_repo=fleet_repo,
         job_repo=job_repo,
         session_repo=session_repo,
+        agent_session_repo=agent_session_repo,
     )
 
 

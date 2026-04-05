@@ -11,6 +11,7 @@ from legion.plumbing.registry import register_command
 from legion.cli.views import render_error
 from legion.cli.views.fleet import (
     display_agent_group_list,
+    display_agent_group_token,
     display_agent_list,
     display_agent_status,
     display_created_agent_group,
@@ -292,6 +293,23 @@ def agent_group_update(
         with _build_client(api_url, api_key) as client:
             ag = client.update_agent_group(id, **fields)
             display_updated_agent_group(ag, output=output)
+    except Exception as e:
+        _handle_error(e)
+        raise typer.Exit(1)
+
+
+@register_command("agent-group", "token")
+def agent_group_token(
+    id: Annotated[str, typer.Option(help="Agent group ID")],
+    output: _OutputOpt = "table",
+    api_url: _ApiUrlOpt = None,
+    api_key: _ApiKeyOpt = None,
+) -> None:
+    """Rotate and print the agent-group registration token."""
+    try:
+        with _build_client(api_url, api_key) as client:
+            result = client.rotate_agent_group_registration_token(id)
+            display_agent_group_token(result, output=output)
     except Exception as e:
         _handle_error(e)
         raise typer.Exit(1)

@@ -29,5 +29,7 @@ class AgentGroup(BaseModel):
     environment: str  # dev, staging, prod
     provider: str  # aks, eks, gke, on-prem
     execution_mode: ExecutionMode = ExecutionMode.READ_ONLY
+    registration_token_hash: str | None = None
+    registration_token_rotated_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

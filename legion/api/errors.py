@@ -6,12 +6,16 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from legion.services.exceptions import (
+    AgentGroupNotFoundError,
     AgentNotFoundError,
     DispatchError,
     DuplicateError,
     FilterError,
+    InvalidRegistrationTokenError,
+    InvalidSessionTokenError,
     ServiceError,
     SessionError,
+    SessionTokenMismatchError,
 )
 
 
@@ -21,6 +25,28 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AgentNotFoundError)
     async def _agent_not_found(request: Request, exc: AgentNotFoundError) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": exc.message})
+
+    @app.exception_handler(AgentGroupNotFoundError)
+    async def _agent_group_not_found(request: Request, exc: AgentGroupNotFoundError) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": exc.message})
+
+    @app.exception_handler(InvalidRegistrationTokenError)
+    async def _invalid_registration_token(
+        request: Request,
+        exc: InvalidRegistrationTokenError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=401, content={"detail": exc.message})
+
+    @app.exception_handler(InvalidSessionTokenError)
+    async def _invalid_session_token(request: Request, exc: InvalidSessionTokenError) -> JSONResponse:
+        return JSONResponse(status_code=401, content={"detail": exc.message})
+
+    @app.exception_handler(SessionTokenMismatchError)
+    async def _session_token_mismatch(
+        request: Request,
+        exc: SessionTokenMismatchError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": exc.message})
 
     @app.exception_handler(SessionError)
     async def _session_error(request: Request, exc: SessionError) -> JSONResponse:

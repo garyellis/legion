@@ -8,14 +8,24 @@ from __future__ import annotations
 from collections import Counter
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from legion.domain.agent import Agent, AgentStatus
+from legion.domain.agent_auth import AgentGroupTokenRotationResult, AgentRegistrationResult, AgentSessionToken
 from legion.domain.job import Job, JobStatus, JobType
 from legion.domain.session import Session
 from legion.plumbing import telemetry
-from legion.services.exceptions import AgentNotFoundError, DispatchError
+from legion.plumbing.tokens import generate_token, hash_token
+from legion.services.agent_session_repository import AgentSessionRepository
+from legion.services.exceptions import (
+    AgentGroupNotFoundError,
+    AgentNotFoundError,
+    DispatchError,
+    InvalidRegistrationTokenError,
+    InvalidSessionTokenError,
+    SessionTokenMismatchError,
+)
 from legion.services.fleet_repository import FleetRepository
 from legion.services.job_repository import JobRepository
 from legion.services.session_repository import SessionRepository
@@ -51,13 +61,17 @@ class DispatchService:
         fleet_repo: FleetRepository,
         job_repo: JobRepository,
         session_repo: SessionRepository | None = None,
+        agent_session_repo: AgentSessionRepository | None = None,
         *,
+        agent_session_token_ttl_seconds: int = 3600,
         on_job_dispatched: OnJobDispatched | None = None,
         on_no_agents_available: OnNoAgentsAvailable | None = None,
     ) -> None:
         self.fleet_repo = fleet_repo
         self.job_repo = job_repo
         self.session_repo = session_repo
+        self.agent_session_repo = agent_session_repo
+        self._agent_session_token_ttl_seconds = agent_session_token_ttl_seconds
         self._on_dispatched = on_job_dispatched
         self._on_no_agents = on_no_agents_available
         self._active_agent_counts: dict[str, dict[str, int]] = {}
@@ -260,6 +274,99 @@ class DispatchService:
         self.fleet_repo.save_agent(agent)
         self._record_active_agent_addition(agent_group_id, agent.status)
         logger.info("Agent registered: %s (%s)", agent.id, agent.name)
+        return agent
+
+    def rotate_agent_group_registration_token(self, agent_group_id: str) -> AgentGroupTokenRotationResult:
+        agent_group = self.fleet_repo.get_agent_group(agent_group_id)
+        if agent_group is None:
+            raise AgentGroupNotFoundError(f"AgentGroup {agent_group_id} not found")
+
+        now = datetime.now(timezone.utc)
+        raw_token = generate_token()
+        agent_group.registration_token_hash = hash_token(raw_token)
+        agent_group.registration_token_rotated_at = now
+        agent_group.updated_at = now
+        self.fleet_repo.save_agent_group(agent_group)
+        logger.info("Rotated registration token for agent group %s", agent_group_id)
+        return AgentGroupTokenRotationResult(
+            agent_group=agent_group,
+            registration_token=raw_token,
+        )
+
+    def register_agent_with_token(
+        self,
+        registration_token: str,
+        name: str,
+        capabilities: list[str] | None = None,
+    ) -> AgentRegistrationResult:
+        if self.agent_session_repo is None:
+            raise DispatchError("agent_session_repo is required for agent registration")
+
+        token_hash = hash_token(registration_token)
+        agent_group = self.fleet_repo.get_agent_group_by_registration_token_hash(token_hash)
+        if agent_group is None:
+            raise InvalidRegistrationTokenError("Invalid registration token")
+
+        existing_agent = next(
+            (
+                agent
+                for agent in self.fleet_repo.list_agents(agent_group.id)
+                if agent.name == name
+            ),
+            None,
+        )
+        if existing_agent is None:
+            agent = Agent(
+                agent_group_id=agent_group.id,
+                name=name,
+                capabilities=capabilities or [],
+                status=AgentStatus.IDLE,
+            )
+            self.fleet_repo.save_agent(agent)
+            self._record_active_agent_addition(agent.agent_group_id, agent.status)
+        else:
+            agent = existing_agent
+            self._ensure_active_agent_counts(agent_group.id)
+            previous_status = agent.status
+            agent.agent_group_id = agent_group.id
+            agent.name = name
+            agent.capabilities = capabilities or []
+            agent.go_idle()
+            self.fleet_repo.save_agent(agent)
+            self._record_active_agent_transition(agent.agent_group_id, previous_status, agent.status)
+
+        self.agent_session_repo.delete_for_agent(agent.id)
+        now = datetime.now(timezone.utc)
+        raw_session_token = generate_token()
+        expires_at = now + timedelta(seconds=self._agent_session_token_ttl_seconds)
+        session_token = AgentSessionToken(
+            agent_id=agent.id,
+            token_hash=hash_token(raw_session_token),
+            expires_at=expires_at,
+        )
+        self.agent_session_repo.save(session_token)
+
+        logger.info("Agent registered via token: %s", agent.id)
+        return AgentRegistrationResult(
+            agent=agent,
+            session_token=raw_session_token,
+            session_token_expires_at=expires_at,
+        )
+
+    def authenticate_agent_session(self, agent_id: str, session_token: str) -> Agent:
+        if self.agent_session_repo is None:
+            raise DispatchError("agent_session_repo is required for agent websocket auth")
+
+        token_hash = hash_token(session_token)
+        stored_token = self.agent_session_repo.get_active_by_token_hash(token_hash)
+        if stored_token is None:
+            raise InvalidSessionTokenError("Invalid or expired session token")
+        if stored_token.agent_id != agent_id:
+            raise SessionTokenMismatchError("Session token does not belong to the requested agent")
+
+        agent = self.fleet_repo.get_agent(agent_id)
+        if agent is None:
+            raise AgentNotFoundError(f"Agent {agent_id} not found")
         return agent
 
     def heartbeat(self, agent_id: str) -> Agent:

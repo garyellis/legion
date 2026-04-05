@@ -10,7 +10,13 @@ from pydantic import BaseModel
 from rich.table import Table
 
 from legion.cli.views.base import console
-from legion.core.fleet_api.models import AgentGroupResponse, AgentResponse, OrgResponse, ProjectResponse
+from legion.core.fleet_api.models import (
+    AgentGroupResponse,
+    AgentGroupTokenResponse,
+    AgentResponse,
+    OrgResponse,
+    ProjectResponse,
+)
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -217,6 +223,17 @@ def display_updated_agent_group(ag: AgentGroupResponse, output: str = "table") -
     console.print(f"  Environment: {ag.environment}")
     console.print(f"  Provider:    {ag.provider}")
     console.print(f"  Mode:        {ag.execution_mode}")
+
+
+def display_agent_group_token(result: AgentGroupTokenResponse, output: str = "table") -> None:
+    """Print a rotated agent-group registration token."""
+    if output == "json":
+        _print_json(result)
+        return
+    console.print("[bold green]Agent group registration token rotated:[/]")
+    console.print(f"  Agent Group ID: {result.agent_group_id}")
+    console.print(f"  Token:           {result.registration_token}")
+    console.print(f"  Rotated:         {result.registration_token_rotated_at}")
 
 
 def display_deleted_agent_group(ag_id: str, output: str = "table") -> None:
