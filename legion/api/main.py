@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -127,12 +128,16 @@ def create_app(
         app.state.connection_manager = ConnectionManager()
         app.state.agent_delivery_service = AgentDeliveryService(
             app.state.dispatch_service,
+            app.state.fleet_repo,
         )
+
+        app.state.db_executor = ThreadPoolExecutor(max_workers=4)
 
         logger.info("API started")
         yield
 
         # Cleanup
+        app.state.db_executor.shutdown(wait=False)
         await app.state.connection_manager.disconnect_all()
         logger.info("API stopped")
 

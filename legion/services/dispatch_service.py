@@ -224,10 +224,15 @@ class DispatchService:
         telemetry.dispatch_latency_seconds.observe(time.perf_counter() - start)
         return dispatched
 
-    def complete_job(self, job_id: str, result: str) -> Job:
+    def complete_job(self, job_id: str, result: str, *, agent_id: str | None = None) -> Job:
         job = self.job_repo.get_by_id(job_id)
         if job is None:
             raise DispatchError(f"Job {job_id} not found")
+
+        if agent_id is not None and job.agent_id != agent_id:
+            raise DispatchError(
+                f"Agent {agent_id} is not assigned to job {job_id}"
+            )
 
         job.complete(result)
         self.job_repo.save(job)
@@ -249,10 +254,15 @@ class DispatchService:
         logger.info("Job completed: %s", job_id)
         return job
 
-    def fail_job(self, job_id: str, error: str) -> Job:
+    def fail_job(self, job_id: str, error: str, *, agent_id: str | None = None) -> Job:
         job = self.job_repo.get_by_id(job_id)
         if job is None:
             raise DispatchError(f"Job {job_id} not found")
+
+        if agent_id is not None and job.agent_id != agent_id:
+            raise DispatchError(
+                f"Agent {agent_id} is not assigned to job {job_id}"
+            )
 
         job.fail(error)
         self.job_repo.save(job)

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta, timezone
+from typing import Any, Callable
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +24,22 @@ from legion.services.dispatch_service import DispatchService
 from legion.services.fleet_repository import SQLiteFleetRepository
 from legion.services.job_repository import SQLiteJobRepository
 from legion.services.session_repository import SQLiteSessionRepository
+
+
+def _wait_for(predicate: Callable[[], Any], *, timeout: float = 1.0, interval: float = 0.01) -> Any:
+    """Poll *predicate* until it returns a truthy value or *timeout* elapses.
+
+    Used to synchronise with server-side ``finally`` blocks that run
+    ``run_in_executor`` work after the WebSocket connection closes.
+    """
+    deadline = time.monotonic() + timeout
+    last: Any = None
+    while time.monotonic() < deadline:
+        last = predicate()
+        if last:
+            return last
+        time.sleep(interval)
+    return last
 
 
 @pytest.fixture()
@@ -139,9 +157,13 @@ class TestAgentWebSocket:
         with client.websocket_connect(
             "/ws/agents/agent-ws-1",
             headers={"Authorization": f"Bearer {raw_token}"},
-        ):
-            reloaded = fleet_repo.get_agent("agent-ws-1")
-            assert reloaded.status == AgentStatus.IDLE
+        ) as ws:
+            saw_idle = _wait_for(
+                lambda: fleet_repo.get_agent("agent-ws-1").status == AgentStatus.IDLE,
+            )
+            assert saw_idle, "Agent did not reach IDLE within timeout"
+            # Send a heartbeat to confirm server is still processing
+            ws.send_text(json.dumps({"type": "heartbeat"}))
 
     def test_heartbeat_updates_timestamp(self, client, fleet_repo):
         raw_token = _seed_agent_and_token(client, fleet_repo, agent_id="agent-ws-2")
@@ -151,8 +173,8 @@ class TestAgentWebSocket:
             headers={"Authorization": f"Bearer {raw_token}"},
         ) as ws:
             ws.send_text(json.dumps({"type": "heartbeat"}))
-            # Send another message to ensure the heartbeat was processed
-            ws.send_text(json.dumps({"type": "heartbeat"}))
+            # Wait for the server to process the heartbeat via run_in_executor
+            _wait_for(lambda: fleet_repo.get_agent("agent-ws-2").last_heartbeat is not None)
 
         reloaded = fleet_repo.get_agent("agent-ws-2")
         assert reloaded.last_heartbeat is not None
@@ -167,6 +189,8 @@ class TestAgentWebSocket:
             ws.send_text("{bad-json")
             ws.send_text(json.dumps({"type": "job_result", "job_id": "missing-job"}))
             ws.send_text(json.dumps({"type": "heartbeat"}))
+            # Wait for the server to process the heartbeat via run_in_executor
+            _wait_for(lambda: fleet_repo.get_agent("agent-ws-2b").last_heartbeat is not None)
 
         reloaded = fleet_repo.get_agent("agent-ws-2b")
         assert reloaded.last_heartbeat is not None
@@ -180,6 +204,7 @@ class TestAgentWebSocket:
         ):
             pass  # connect then immediately disconnect
 
+        _wait_for(lambda: fleet_repo.get_agent("agent-ws-3").status == AgentStatus.OFFLINE)
         reloaded = fleet_repo.get_agent("agent-ws-3")
         assert reloaded.status == AgentStatus.OFFLINE
 
@@ -199,6 +224,7 @@ class TestAgentWebSocket:
         ):
             pass  # disconnect
 
+        _wait_for(lambda: job_repo.get_by_id(job.id).status == JobStatus.PENDING)
         reloaded_job = job_repo.get_by_id(job.id)
         assert reloaded_job.status == JobStatus.PENDING
         assert reloaded_job.agent_id is None
@@ -220,8 +246,8 @@ class TestAgentWebSocket:
             ws.send_text(json.dumps({
                 "type": "job_result", "job_id": job.id, "result": "all pods healthy",
             }))
-            # Send heartbeat to ensure previous message was processed
-            ws.send_text(json.dumps({"type": "heartbeat"}))
+            # Wait for the server to process the message via run_in_executor
+            _wait_for(lambda: job_repo.get_by_id(job.id).status == JobStatus.COMPLETED)
 
         reloaded_job = job_repo.get_by_id(job.id)
         assert reloaded_job.status == JobStatus.COMPLETED
@@ -244,7 +270,8 @@ class TestAgentWebSocket:
             ws.send_text(json.dumps({
                 "type": "job_failed", "job_id": job.id, "error": "timeout",
             }))
-            ws.send_text(json.dumps({"type": "heartbeat"}))
+            # Wait for the server to process the message via run_in_executor
+            _wait_for(lambda: job_repo.get_by_id(job.id).status == JobStatus.FAILED)
 
         reloaded_job = job_repo.get_by_id(job.id)
         assert reloaded_job.status == JobStatus.FAILED

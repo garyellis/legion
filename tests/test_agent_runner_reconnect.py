@@ -15,7 +15,7 @@ from websockets.http11 import Response
 from legion.agent_runner.client import AgentRunnerClient
 from legion.agent_runner.config import AgentRunnerConfig
 from legion.agent_runner.executor import DeterministicAgentExecutor, ExecutionResult
-from legion.agent_runner.models import JobDispatchMessage
+from legion.domain.protocol import JobDispatchMessage
 from legion.core.fleet_api.models import (
     AgentConnectionConfig,
     AgentRegistrationResponse,
@@ -126,7 +126,7 @@ class ControlledExecutor:
         self.started = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def execute(self, _job: JobDispatchMessage):
+    async def execute(self, _job: JobDispatchMessage, _emitter=None):
         self.started.set()
         await self.release.wait()
         return ExecutionResult(output="controlled result")

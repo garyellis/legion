@@ -15,14 +15,14 @@ from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
 from legion.agent_runner.config import AgentRunnerConfig
-from legion.agent_runner.executor import AgentExecutionError, AgentExecutor
-from legion.agent_runner.models import (
+from legion.agent_runner.executor import AgentExecutionError, AgentExecutor, EmissionConnectionLost, WebSocketJobEmitter
+from legion.agent_runner.models import RegisteredAgentSession
+from legion.domain.protocol import (
     HeartbeatMessage,
     JobDispatchMessage,
     JobFailedMessage,
     JobResultMessage,
     JobStartedMessage,
-    RegisteredAgentSession,
 )
 from legion.core.fleet_api.client import FleetAPIError
 from legion.core.fleet_api.models import AgentRegistrationResponse
@@ -211,14 +211,19 @@ class AgentRunnerClient:
         await self._send_message(websocket, JobStartedMessage(job_id=message.job_id))
         logger.info("Started job %s (%s)", message.job_id, message.job_type.value)
 
+        emitter = WebSocketJobEmitter(websocket, message.job_id, self._send_lock)
+
         try:
-            result = await self._executor.execute(message)
+            result = await self._executor.execute(message, emitter)
         except AgentExecutionError as exc:
             await self._send_message(
                 websocket,
                 JobFailedMessage(job_id=message.job_id, error=str(exc)),
             )
-            logger.info("Job %s failed deterministically: %s", message.job_id, exc)
+            logger.info("Job %s failed: %s", message.job_id, exc)
+        except EmissionConnectionLost:
+            logger.warning("Connection lost during job %s; aborting without result send", message.job_id)
+            raise
         except Exception as exc:
             await self._send_message(
                 websocket,
@@ -272,6 +277,8 @@ class AgentRunnerClient:
 
     def _should_retry(self, exc: Exception) -> bool:
         if self._is_authentication_failure(exc):
+            return True
+        if isinstance(exc, EmissionConnectionLost):
             return True
         if isinstance(exc, FleetAPIError):
             return exc.retryable

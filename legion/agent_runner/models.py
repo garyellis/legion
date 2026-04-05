@@ -1,15 +1,13 @@
-"""Typed protocol and session models for the agent runner."""
+"""Session model for the agent runner."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from pydantic import BaseModel
 
 from legion.core.fleet_api.models import AgentRegistrationResponse
-from legion.domain.job import JobType
 
 
 def _resolve_websocket_url(api_url: str, websocket_path: str) -> str:
@@ -55,41 +53,3 @@ class RegisteredAgentSession(BaseModel):
     def is_expired(self, now: datetime | None = None) -> bool:
         reference = now or datetime.now(timezone.utc)
         return self.session_token_expires_at <= reference
-
-
-class JobDispatchMessage(BaseModel):
-    """Job delivery message received from the control plane."""
-
-    type: Literal["job_dispatch"]
-    job_id: str
-    job_type: JobType
-    payload: str
-
-
-class HeartbeatMessage(BaseModel):
-    """Heartbeat sent to keep the agent session alive."""
-
-    type: Literal["heartbeat"] = "heartbeat"
-
-
-class JobStartedMessage(BaseModel):
-    """Job state update sent before local execution starts."""
-
-    type: Literal["job_started"] = "job_started"
-    job_id: str
-
-
-class JobResultMessage(BaseModel):
-    """Successful job completion payload."""
-
-    type: Literal["job_result"] = "job_result"
-    job_id: str
-    result: str
-
-
-class JobFailedMessage(BaseModel):
-    """Failed job completion payload."""
-
-    type: Literal["job_failed"] = "job_failed"
-    job_id: str
-    error: str

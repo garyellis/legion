@@ -16,7 +16,7 @@ from legion.agents.config import AgentConfig
 from legion.agents.exceptions import AgentError
 from legion.agents.graph import ReactGraph, build_react_graph, create_chat_model
 from legion.agent_runner.executor import GraphExecutor
-from legion.agent_runner.models import JobDispatchMessage
+from legion.domain.protocol import JobDispatchMessage
 from legion.domain.job import JobType
 from legion.plumbing.plugins import tool
 
@@ -355,6 +355,8 @@ def test_graph_executor_invokes_graph_with_job_payload(monkeypatch) -> None:
         ),
     )
 
+    from legion.agent_runner.executor import NullJobEmitter
+
     result = asyncio.run(
         executor.execute(
             JobDispatchMessage(
@@ -363,6 +365,7 @@ def test_graph_executor_invokes_graph_with_job_payload(monkeypatch) -> None:
                 job_type=JobType.INVESTIGATE,
                 payload="Inspect prod",
             ),
+            NullJobEmitter(),
         ),
     )
 
