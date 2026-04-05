@@ -283,13 +283,14 @@ After implementation:
 5. Commit and push
 6. Run gh pr create with a summary'
 
-# Terminal 2 — migrations (touches alembic/ and app startup)
+# Terminal 2 — migrations (touches alembic/ and startup validation)
 wt switch -x claude -c feature/alembic -- \
   'Set up Alembic for database migrations.
 
 - alembic init, configure env.py against legion/plumbing/database.py models
 - Autogenerate initial migration from the existing ORM schema
-- Wire alembic upgrade head into app startup (production + dev-with-file-DB)
+- Wire `legion-cli db upgrade` into deploy-time workflows; app startup only validates current == head
+- Use dedicated operator DB config (`LEGION_DB_URL`, etc.) so normal API-backed CLI commands do not assume direct DB reachability
 - Keep create_all() for test fixtures (sqlite:///:memory: skips migrations)
 - Add ADR in docs/decisionlog/ for the alembic dependency
 

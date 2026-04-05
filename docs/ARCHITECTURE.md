@@ -119,6 +119,11 @@ Independent consumers of the layers below. Thin. Parse input, call logic, format
 
 **Current state**: `cli/` and `slack/` are implemented. `api/` and `tui/` are empty placeholders.
 
+Persistent startup paths in `api/` and `slack/` validate that the runtime
+database is already at Alembic head before serving. Deploy-time schema
+changes live behind `legion-cli db upgrade`. Explicit test fixtures may still
+use `create_all()` against `sqlite:///:memory:` directly.
+
 ---
 
 ## Directory Structure
@@ -161,11 +166,13 @@ legion/
 │   ├── main.py                        # Typer app bootstrap
 │   ├── registry.py                    # CLI command registry
 │   ├── commands/                      # Command handlers
+│   │   ├── db.py                      #   Alembic inspection + upgrade commands
 │   │   ├── lab.py                     #   OpenStack lab commands
 │   │   ├── network.py                 #   DNS, SSH, WoL commands
 │   │   └── shout.py                   #   Slack integration commands
 │   └── views/                         # Rich rendering
 │       ├── base.py                    #   Shared view utilities
+│       ├── db.py                      #   DB migration status/history output
 │       ├── lab.py                     #   OpenStack output formatting
 │       └── network.py                 #   Network output formatting
 │
@@ -310,6 +317,8 @@ The project uses SQLAlchemy with support for SQLite (local dev, single-node) and
 
 - **`plumbing/database.py`** provides the shared `Base`, `create_engine()`, and `create_all()`. All ORM models inherit from this single `Base`.
 - **`plumbing/config/database.py`** provides `DatabaseConfig` reading `DATABASE_URL` etc. from environment.
+- **`plumbing/config/db_admin.py`** provides operator-only direct DB config via `LEGION_DB_*` for `legion-cli db ...`.
+- **`plumbing/migrations.py`** owns Alembic history/current/head inspection, explicit upgrades, and startup validation that the DB is already current.
 - **Repository pattern**: Each domain has an ABC (e.g., `IncidentRepository`) with in-memory and SQLite implementations. Tests run contract suites against both.
 - **Engine sharing**: Surfaces create one engine at startup and pass it to all repositories. One connection pool, one database.
 - **SQLite quirks**: `create_engine()` automatically sets `check_same_thread=False`. The `_ensure_utc()` helper in repository code reattaches timezone info to naive datetimes returned by SQLite.
