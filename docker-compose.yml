@@ -1,3 +1,7 @@
+x-legion-db-env: &legion-db-env
+  DATABASE_URL: "postgresql+psycopg://legion:legion@postgres:5432/legion"
+  LEGION_DB_URL: "postgresql+psycopg://legion:legion@postgres:5432/legion"
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -23,20 +27,32 @@ services:
       interval: 5s
       retries: 5
 
+  migrate:
+    build: .
+    command: legion-cli db upgrade
+    environment:
+      <<: *legion-db-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build: .
     command: legion-api
     ports:
       - "8000:8000"
     environment:
+      <<: *legion-db-env
       API_HOST: "0.0.0.0"
       API_PORT: "8000"
       API_LOG_LEVEL: "DEBUG"
       API_LOG_FORMAT: "TEXT"
-      DATABASE_URL: "postgresql+psycopg://legion:legion@postgres:5432/legion"
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health/ready').raise_for_status()"]
       interval: 10s
