@@ -26,6 +26,7 @@ PACKAGE_IMPORT_MAP: dict[str, str] = {
     "slack-bolt": "slack_bolt",
     "slack-sdk": "slack_sdk",
     "langchain-openai": "langchain_openai",
+    "langchain-anthropic": "langchain_anthropic",
     "langchain-core": "langchain_core",
     "asciichartpy": "asciichartpy",
     "ipython": "IPython",

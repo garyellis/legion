@@ -24,15 +24,18 @@ LAYER_BANNED_IMPORTS: dict[str, set[str]] = {
     "internal": set(),
     "core": {
         "rich", "langchain", "langchain_core", "langchain_openai",
+        "langchain_anthropic", "langgraph",
         "slack_bolt", "fastapi", "typer", "uvicorn",
     },
     "domain": {
         "rich", "langchain", "langchain_core", "langchain_openai",
+        "langchain_anthropic", "langgraph",
         "slack_bolt", "slack_sdk", "fastapi", "typer", "uvicorn",
         "sqlalchemy", "httpx", "aiohttp",
     },
     "services": {
         "rich", "langchain", "langchain_core", "langchain_openai",
+        "langchain_anthropic", "langgraph",
         "slack_bolt", "slack_sdk", "fastapi", "typer", "uvicorn",
     },
     "agents": {

@@ -52,7 +52,12 @@ build-backend = "hatchling.build"
 packages = ["legion"]
 
 [project.optional-dependencies]
-agents = ["langchain-openai>=0.3", "langchain-core>=0.3"]
+agents = [
+    "langchain-openai>=0.3,<1",
+    "langchain-core>=0.3,<1",
+    "langgraph>=0.3,<1",
+    "langchain-anthropic>=0.3,<1",
+]
 metrics = ["prometheus-client>=0.20,<1"]
 postgres = ["psycopg[binary]>=3.1"]
 
