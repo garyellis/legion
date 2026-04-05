@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 from legion.domain.filter_rule import FilterAction, FilterRule
+from legion.plumbing import telemetry
 from legion.services.exceptions import FilterError
 
 logger = logging.getLogger(__name__)
@@ -25,19 +27,29 @@ class FilterService:
         Rules are sorted by priority (highest first). Returns the action
         of the first matching rule, or None if no rules match.
         """
-        sorted_rules = sorted(rules, key=lambda r: r.priority, reverse=True)
+        start = time.perf_counter()
+        try:
+            sorted_rules = sorted(rules, key=lambda r: r.priority, reverse=True)
 
-        for rule in sorted_rules:
-            try:
-                if re.search(rule.pattern, message_text):
-                    logger.debug(
-                        "Rule %s matched: pattern=%r action=%s",
-                        rule.id, rule.pattern, rule.action.value,
-                    )
-                    return rule.action
-            except re.error as exc:
-                raise FilterError(
-                    f"Invalid regex in rule {rule.id}: {rule.pattern!r}"
-                ) from exc
+            for rule in sorted_rules:
+                try:
+                    if re.search(rule.pattern, message_text):
+                        logger.debug(
+                            "Rule %s matched: pattern=%r action=%s",
+                            rule.id, rule.pattern, rule.action.value,
+                        )
+                        telemetry.filter_evaluations_total.labels(
+                            rule.action.value,
+                        ).inc()
+                        return rule.action
+                except re.error as exc:
+                    raise FilterError(
+                        f"Invalid regex in rule {rule.id}: {rule.pattern!r}"
+                    ) from exc
 
-        return None
+            telemetry.filter_evaluations_total.labels("none").inc()
+            return None
+        finally:
+            telemetry.filter_evaluation_duration_seconds.observe(
+                time.perf_counter() - start,
+            )

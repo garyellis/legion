@@ -59,7 +59,7 @@ Execution order:
 │ (parallel with B)        │  │ (parallel with B)        │  │ (parallel with B)        │
 │                          │  │                          │  │                          │
 │ • /health, /health/ready │  │ • plumbing/telemetry.py  │  │ • alembic init + config  │
-│                          │  │   (metrics + traces)     │  │ • Initial migration from │
+│                          │  │   (metrics facade)       │  │ • Initial migration from │
 │                          │  │ • plumbing/plugins.py    │  │   current schema         │
 │                          │  │   (@tool decorator)      │  │ • Replace create_all()   │
 │                          │  │ • /metrics endpoint      │  │   startup with           │
@@ -87,8 +87,8 @@ Execution order:
 5. **Job schema additions**: `event_id` (nullable FK → Event, Decision 37), `required_capabilities` (list[str], Decision 40), expanded `JobType` enum (TRIAGE, QUERY initially — extensible), `VERIFYING` state added to `JobStatus` (Decision 43).
 6. **Message schema** (Decision 44): `domain/message.py` with `AuthorType` and `MessageType` enums. `MessageRepository` with `save`, `list_by_session`, `list_by_job`. `messages` ORM table. This is the structured session timeline — human questions, agent findings, tool summaries, approval flows.
 7. **Observability primitives** (Decision 26):
-   - `plumbing/telemetry.py` — Prometheus metrics (counters, histograms, gauges) + OpenTelemetry tracer. No-ops when disabled. Zero cost to import.
-   - `plumbing/plugins.py` — `@tool` decorator for core functions (metadata only, no AI framework imports). Entry point discovery via `importlib.metadata`. Foundation for the plugin system (Decision 27).
+   - `plumbing/telemetry.py` — Prometheus metrics (counters, histograms, gauges) with no-op fallbacks when the optional dependency is absent. Zero cost to import.
+   - `plumbing/plugins.py` — metadata-only `@tool` decorator carrying `name`, `description`, `category`, `read_only`, `tags`, and `version`. Runtime discovery remains deferred.
    - `/metrics` endpoint — Prometheus scrape target on the API.
    - Instrument `DispatchService`, `SessionService`, `FilterService` with intentional metrics (not auto-instrumented noise).
 8. **Alembic database migrations** (Decision 29): Initialize Alembic, generate initial migration from existing ORM schema, wire into app startup. Replace `create_all()` with `alembic upgrade head`. The AgentGroup rename in item 1 becomes the second migration — proving the migration workflow from day one.
@@ -120,6 +120,7 @@ Execution order:
 - Registration token for agent groups — the CLI `agent-group token` command generates/displays a token agents use to self-register
 - Telemetry must be zero-cost when disabled — no SDK initialization, no background threads. `plumbing/telemetry.py` is importable from any layer without side effects.
 - The `@tool` decorator in `plumbing/plugins.py` annotates metadata only — it does NOT import LangChain or any AI framework
+- OpenTelemetry tracing and plugin entry-point discovery remain later-phase work; Sprint A closes only the import-safe metrics facade and metadata contract.
 - **Alembic**: Use `--autogenerate` for the initial migration. Keep `create_all()` available for test fixtures (`sqlite:///:memory:` doesn't need migrations). Production and dev-with-file-DB use Alembic.
 - **Single-worker constraint**: Until Redis backplane is implemented (Decision 17), the API MUST run as a single uvicorn worker. `ConnectionManager` is in-process only — multiple workers would partition WebSocket connections and break job dispatch. Document this in deployment notes and enforce via default config (`workers=1`).
 - **Auth in tests**: Test fixtures should pass the API key header or use a test app with auth disabled. Don't let auth make the test suite painful.

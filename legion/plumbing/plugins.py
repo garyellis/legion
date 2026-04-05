@@ -10,6 +10,8 @@ from typing import Callable
 class ToolMeta:
     name: str
     description: str
+    category: str
+    read_only: bool = True
     tags: tuple[str, ...] = ()
     version: str = "1.0"
 
@@ -18,6 +20,8 @@ def tool(
     name: str,
     *,
     description: str = "",
+    category: str,
+    read_only: bool = True,
     tags: tuple[str, ...] = (),
     version: str = "1.0",
 ) -> Callable[[Callable[..., object]], Callable[..., object]]:
@@ -25,6 +29,8 @@ def tool(
     meta = ToolMeta(
         name=name,
         description=description,
+        category=category,
+        read_only=read_only,
         tags=tuple(tags),
         version=version,
     )

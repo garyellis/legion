@@ -94,13 +94,32 @@ def test_render_metrics_returns_bytes_and_content_type() -> None:
 
 
 def test_tool_decorator_attaches_metadata() -> None:
-    @tool("demo", description="example", tags=("ops",), version="2.0")
+    @tool(
+        "demo",
+        description="example",
+        category="ops",
+        read_only=False,
+        tags=("ops",),
+        version="2.0",
+    )
     def sample() -> str:
         return "ok"
 
     meta = get_tool_meta(sample)
-    assert meta == ToolMeta("demo", "example", ("ops",), "2.0")
+    assert meta == ToolMeta(
+        name="demo",
+        description="example",
+        category="ops",
+        read_only=False,
+        tags=("ops",),
+        version="2.0",
+    )
     assert sample() == "ok"
+
+
+def test_new_filter_metrics_follow_noop_contract() -> None:
+    telemetry.filter_evaluations_total.labels("TRIAGE").inc()
+    telemetry.filter_evaluation_duration_seconds.observe(0.1)
 
 
 def test_get_tool_meta_returns_none_for_undecorated() -> None:

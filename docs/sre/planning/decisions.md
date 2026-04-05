@@ -351,9 +351,11 @@ The API bridges between these layers: agent sends `job_progress` → API pushes 
 
 **Decision**: Intentional metrics and traces only. Every metric and span is deliberately placed by a developer, not auto-generated. Implementation lives in `plumbing/telemetry.py`.
 
+**Sprint A foundation**: Sprint A closes only the Prometheus/no-op metrics facade, `/metrics`, and intentional service-boundary metrics already implemented in the control plane. OpenTelemetry tracing remains deferred until the runtime and propagation points exist.
+
 **Implementation**:
 - **Prometheus metrics** — Counters, histograms, gauges defined in `plumbing/telemetry.py`. Exported at `/metrics`.
-- **OpenTelemetry traces** — Single tracer, spans placed at service boundaries. Trace context propagated in WebSocket `job_dispatch` messages so agent spans connect to control plane spans.
+- **OpenTelemetry traces** — Deferred beyond Sprint A closeout. The long-term design is still service-boundary spans with propagated context, but the current foundation does not yet provide a tracer implementation.
 - **Zero-cost when disabled** — Importing `plumbing/telemetry` when telemetry is disabled creates no-op stubs. No SDK initialization, no background threads, no network calls.
 
 **Operator metrics** (what matters for running the fleet):
@@ -390,6 +392,8 @@ The API bridges between these layers: agent sends `job_progress` → API pushes 
 **Problem**: Tools need to be discoverable at runtime. The codebase already has three proto-plugin systems (CLI registry, Slack registry, tool adapter). External contributors should be able to add tools the same way core tools are added. If we design the tool registry right in Sprint B, it IS the plugin system.
 
 **Decision**: Formalize the plugin system using Python entry points (`importlib.metadata`). Core tools are the first plugins. The `@tool` decorator in `plumbing/plugins.py` annotates metadata. Discovery via entry points in `pyproject.toml`.
+
+**Sprint A foundation**: Sprint A closes only the metadata contract in `plumbing/plugins.py`. That contract carries tool classification (`category`, `read_only`) without adding runtime discovery or adapters yet.
 
 **Architecture**:
 
@@ -436,7 +440,9 @@ datadog = "legion_datadog:tools"
 
 `pip install legion-datadog-tools` → tools immediately available to agents.
 
-**What this enables now**: Core tools discoverable via entry points. `legion-cli plugins list` shows all tools. The agent graph loads tools dynamically based on what's installed.
+**What this enables now**: A stable metadata contract for core and third-party tools, so later discovery and adapter work can rely on a fixed shape.
+
+**What this enables later**: Core tools discoverable via entry points. `legion-cli plugins list` shows all tools. The agent graph loads tools dynamically based on what's installed.
 
 **What this does NOT require yet**: Sandboxing for untrusted plugins, hot reload, plugin marketplace. Core plugins run in-process and are trusted.
 

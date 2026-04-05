@@ -104,6 +104,15 @@ sessions_created_total = _counter(
     "Total sessions created by organization and agent group.",
     ("org_id", "agent_group_id"),
 )
+filter_evaluations_total = _counter(
+    "filter_evaluations_total",
+    "Total filter evaluations by outcome.",
+    ("outcome",),
+)
+filter_evaluation_duration_seconds = _histogram(
+    "filter_evaluation_duration_seconds",
+    "Latency for FilterService evaluations.",
+)
 
 
 def metrics_available() -> bool:
