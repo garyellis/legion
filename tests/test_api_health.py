@@ -40,6 +40,16 @@ def client(app):
 
 
 class TestHealth:
+    def test_create_app_requires_all_repos_when_injecting(self, fleet_repo, _engine):
+        with pytest.raises(
+            ValueError,
+            match="fleet_repo, job_repo, and session_repo must all be provided together",
+        ):
+            create_app(
+                fleet_repo=fleet_repo,
+                job_repo=SQLiteJobRepository(_engine),
+            )
+
     def test_liveness(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200

@@ -67,7 +67,11 @@ async def send_message(
         raise HTTPException(status_code=422, detail="Session is not active")
 
     job = dispatch_service.create_job(
-        session.org_id, session.agent_group_id, JobType.QUERY, body.payload,
+        session.org_id,
+        session.agent_group_id,
+        JobType.QUERY,
+        body.payload,
+        session_id=session.id,
     )
     dispatched = dispatch_service.dispatch_pending(session.agent_group_id)
 

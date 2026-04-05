@@ -1,5 +1,7 @@
 """CRUD route tests for the API surface."""
 
+from __future__ import annotations
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -339,14 +341,26 @@ class TestPromptConfigs:
 
 class TestJobs:
     def test_list(self, client, job_repo):
-        job = Job(org_id="org-1", agent_group_id="ag-1", type=JobType.TRIAGE, payload="alert")
+        job = Job(
+            org_id="org-1",
+            agent_group_id="ag-1",
+            session_id="session-1",
+            type=JobType.TRIAGE,
+            payload="alert",
+        )
         job_repo.save(job)
         resp = client.get("/jobs/?agent_group_id=ag-1")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     def test_get(self, client, job_repo):
-        job = Job(org_id="org-1", agent_group_id="ag-1", type=JobType.TRIAGE, payload="alert")
+        job = Job(
+            org_id="org-1",
+            agent_group_id="ag-1",
+            session_id="session-1",
+            type=JobType.TRIAGE,
+            payload="alert",
+        )
         job_repo.save(job)
         resp = client.get(f"/jobs/{job.id}")
         assert resp.status_code == 200
@@ -408,6 +422,7 @@ class TestSessions:
         assert resp.status_code == 201
         assert resp.json()["type"] == "QUERY"
         assert resp.json()["status"] == "PENDING"
+        assert resp.json()["session_id"] == session["id"]
 
     def test_send_message_session_not_found(self, client):
         resp = client.post("/sessions/nope/messages", json={"payload": "hello"})

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -49,13 +50,16 @@ class JobRow(Base):
     id = Column(String, primary_key=True)
     org_id = Column(String, nullable=False)
     agent_group_id = Column(String, nullable=False)
+    session_id = Column(String, nullable=False)
     agent_id = Column(String, nullable=True)
+    event_id = Column(String, nullable=True)
     type = Column(String, nullable=False)
     status = Column(String, nullable=False, default=JobStatus.PENDING.value)
     payload = Column(Text, nullable=False)
     result = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
     incident_id = Column(String, nullable=True)
+    required_capabilities = Column(Text, nullable=False, default="[]")
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
     dispatched_at = Column(DateTime(timezone=True), nullable=True)
@@ -79,13 +83,16 @@ class SQLiteJobRepository(JobRepository):
                 session.add(row)
             row.org_id = job.org_id
             row.agent_group_id = job.agent_group_id
+            row.session_id = job.session_id
             row.agent_id = job.agent_id
+            row.event_id = job.event_id
             row.type = job.type.value
             row.status = job.status.value
             row.payload = job.payload
             row.result = job.result
             row.error = job.error
             row.incident_id = job.incident_id
+            row.required_capabilities = json.dumps(job.required_capabilities)
             row.created_at = job.created_at
             row.updated_at = job.updated_at
             row.dispatched_at = job.dispatched_at
@@ -141,13 +148,16 @@ class SQLiteJobRepository(JobRepository):
             id=row.id,
             org_id=row.org_id,
             agent_group_id=row.agent_group_id,
+            session_id=row.session_id,
             agent_id=row.agent_id,
+            event_id=row.event_id,
             type=JobType(row.type),
             status=JobStatus(row.status),
             payload=row.payload,
             result=row.result,
             error=row.error,
             incident_id=row.incident_id,
+            required_capabilities=json.loads(row.required_capabilities or "[]"),
             created_at=ensure(row.created_at),
             updated_at=ensure(row.updated_at),
             dispatched_at=ensure(row.dispatched_at),

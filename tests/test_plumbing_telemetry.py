@@ -207,7 +207,11 @@ def test_dispatch_service_increments_telemetry(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr("legion.services.dispatch_service.telemetry.active_agents", active_agents)
     monkeypatch.setattr("legion.services.dispatch_service.telemetry.dispatch_latency_seconds", dispatch_latency)
 
-    service = DispatchService(repos["fleet_repo"], repos["job_repo"])
+    service = DispatchService(
+        repos["fleet_repo"],
+        repos["job_repo"],
+        repos["session_repo"],
+    )
     agent = service.register_agent("ag-1", "agent-1")
     job = service.create_job("org-1", "ag-1", JobType.TRIAGE, "payload")
     assert ("labels", ("ag-1", "IDLE")) in active_agents.calls

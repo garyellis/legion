@@ -12,12 +12,18 @@ from pydantic import BaseModel, Field
 class JobType(str, Enum):
     TRIAGE = "TRIAGE"
     QUERY = "QUERY"
+    INVESTIGATE = "INVESTIGATE"
+    DIAGNOSE = "DIAGNOSE"
+    SUMMARIZE = "SUMMARIZE"
+    REMEDIATE = "REMEDIATE"
+    VALIDATE = "VALIDATE"
 
 
 class JobStatus(str, Enum):
     PENDING = "PENDING"
     DISPATCHED = "DISPATCHED"
     RUNNING = "RUNNING"
+    VERIFYING = "VERIFYING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -31,13 +37,16 @@ class Job(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     org_id: str
     agent_group_id: str
+    session_id: str
     agent_id: str | None = None
+    event_id: str | None = None
     type: JobType
     status: JobStatus = JobStatus.PENDING
     payload: str
     result: str | None = None
     error: str | None = None
     incident_id: str | None = None
+    required_capabilities: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     dispatched_at: datetime | None = None
@@ -63,6 +72,11 @@ class Job(BaseModel):
         now = datetime.now(timezone.utc)
         self.completed_at = now
         self.updated_at = now
+
+    def verify(self) -> None:
+        """RUNNING -> VERIFYING."""
+        self.status = JobStatus.VERIFYING
+        self.updated_at = datetime.now(timezone.utc)
 
     def fail(self, error: str) -> None:
         """RUNNING -> FAILED with error."""

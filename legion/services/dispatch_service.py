@@ -13,10 +13,12 @@ from typing import Callable
 
 from legion.domain.agent import Agent, AgentStatus
 from legion.domain.job import Job, JobStatus, JobType
+from legion.domain.session import Session
 from legion.plumbing import telemetry
 from legion.services.exceptions import AgentNotFoundError, DispatchError
 from legion.services.fleet_repository import FleetRepository
 from legion.services.job_repository import JobRepository
+from legion.services.session_repository import SessionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +50,14 @@ class DispatchService:
         self,
         fleet_repo: FleetRepository,
         job_repo: JobRepository,
+        session_repo: SessionRepository | None = None,
         *,
         on_job_dispatched: OnJobDispatched | None = None,
         on_no_agents_available: OnNoAgentsAvailable | None = None,
     ) -> None:
         self.fleet_repo = fleet_repo
         self.job_repo = job_repo
+        self.session_repo = session_repo
         self._on_dispatched = on_job_dispatched
         self._on_no_agents = on_no_agents_available
         self._active_agent_counts: dict[str, dict[str, int]] = {}
@@ -107,14 +111,52 @@ class DispatchService:
         agent_group_id: str,
         job_type: JobType,
         payload: str,
+        *,
+        session_id: str | None = None,
+        event_id: str | None = None,
+        required_capabilities: list[str] | None = None,
     ) -> Job:
+        if self.session_repo is None:
+            raise DispatchError("session_repo is required for job creation")
+
+        auto_created_session_id: str | None = None
+        if session_id is None:
+            session = Session(org_id=org_id, agent_group_id=agent_group_id)
+            self.session_repo.save(session)
+            session_id = session.id
+            auto_created_session_id = session.id
+        else:
+            existing_session = self.session_repo.get_by_id(session_id)
+            if existing_session is None:
+                raise DispatchError(f"Session {session_id} not found")
+            if (
+                existing_session.org_id != org_id
+                or existing_session.agent_group_id != agent_group_id
+            ):
+                raise DispatchError(
+                    f"Session {session_id} does not belong to org/group {org_id}/{agent_group_id}",
+                )
         job = Job(
             org_id=org_id,
             agent_group_id=agent_group_id,
+            session_id=session_id,
+            event_id=event_id,
             type=job_type,
             payload=payload,
+            required_capabilities=required_capabilities or [],
         )
-        self.job_repo.save(job)
+        try:
+            self.job_repo.save(job)
+        except Exception:
+            if auto_created_session_id is not None:
+                try:
+                    self.session_repo.delete(auto_created_session_id)
+                except Exception:
+                    logger.exception(
+                        "Failed to rollback auto-created session %s after job save failure",
+                        auto_created_session_id,
+                    )
+            raise
         telemetry.jobs_created_total.labels(org_id, job_type.value).inc()
         logger.info("Job created: %s (%s)", job.id, job.type.value)
         return job

@@ -1,5 +1,7 @@
 """WebSocket integration tests for the API surface."""
 
+from __future__ import annotations
+
 import json
 
 import pytest
@@ -91,7 +93,7 @@ class TestAgentWebSocket:
         fleet_repo.save_agent(agent)
 
         job = Job(
-            org_id="org-1", agent_group_id="ag-1",
+            org_id="org-1", agent_group_id="ag-1", session_id="session-1",
             type=JobType.TRIAGE, payload="alert",
             status=JobStatus.DISPATCHED, agent_id="agent-ws-4",
         )
@@ -112,7 +114,7 @@ class TestAgentWebSocket:
         fleet_repo.save_agent(agent)
 
         job = Job(
-            org_id="org-1", agent_group_id="ag-1",
+            org_id="org-1", agent_group_id="ag-1", session_id="session-2",
             type=JobType.QUERY, payload="check pods",
             status=JobStatus.DISPATCHED, agent_id="agent-ws-5",
         )
@@ -137,7 +139,7 @@ class TestAgentWebSocket:
         fleet_repo.save_agent(agent)
 
         job = Job(
-            org_id="org-1", agent_group_id="ag-1",
+            org_id="org-1", agent_group_id="ag-1", session_id="session-3",
             type=JobType.QUERY, payload="check pods",
             status=JobStatus.DISPATCHED, agent_id="agent-ws-6",
         )

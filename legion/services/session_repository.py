@@ -25,6 +25,9 @@ class SessionRepository(ABC):
     def save(self, session: Session) -> None: ...
 
     @abstractmethod
+    def delete(self, session_id: str) -> None: ...
+
+    @abstractmethod
     def get_by_id(self, session_id: str) -> Optional[Session]: ...
 
     @abstractmethod
@@ -77,6 +80,14 @@ class SQLiteSessionRepository(SessionRepository):
             row.status = session.status.value
             row.created_at = session.created_at
             row.last_activity = session.last_activity
+            db.commit()
+
+    def delete(self, session_id: str) -> None:
+        with self._session_factory() as db:
+            row = db.get(SessionRow, session_id)
+            if row is None:
+                return
+            db.delete(row)
             db.commit()
 
     def get_by_id(self, session_id: str) -> Optional[Session]:

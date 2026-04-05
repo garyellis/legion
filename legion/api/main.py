@@ -68,6 +68,14 @@ def create_app(
 ) -> FastAPI:
     """App factory. Pass repos for testing; defaults to SQLite."""
 
+    provided_repos = (fleet_repo, job_repo, session_repo)
+    if any(repo is not None for repo in provided_repos) and not all(
+        repo is not None for repo in provided_repos
+    ):
+        raise ValueError(
+            "fleet_repo, job_repo, and session_repo must all be provided together",
+        )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Repos — use provided or create defaults
@@ -100,7 +108,9 @@ def create_app(
 
         # Services
         app.state.dispatch_service = DispatchService(
-            app.state.fleet_repo, app.state.job_repo,
+            app.state.fleet_repo,
+            app.state.job_repo,
+            app.state.session_repo,
         )
         app.state.session_service = SessionService(
             app.state.session_repo, app.state.fleet_repo,

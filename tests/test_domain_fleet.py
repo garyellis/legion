@@ -1,8 +1,14 @@
 """Tests for fleet domain models: Organization, AgentGroup, Agent, Job."""
 
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
 from legion.domain.agent import Agent, AgentStatus
 from legion.domain.agent_group import AgentGroup, ExecutionMode
 from legion.domain.job import Job, JobStatus, JobType
+from legion.domain.message import AuthorType, Message, MessageType
 from legion.domain.organization import Organization
 
 
@@ -87,17 +93,18 @@ class TestAgent:
 class TestJob:
     def test_creation_defaults(self):
         job = Job(
-            org_id="org-1", agent_group_id="ag-1",
+            org_id="org-1", agent_group_id="ag-1", session_id="session-1",
             type=JobType.TRIAGE, payload="alert fired",
         )
         assert job.status == JobStatus.PENDING
         assert job.agent_id is None
         assert job.result is None
         assert job.dispatched_at is None
+        assert job.required_capabilities == []
 
     def test_lifecycle_pending_to_completed(self):
         job = Job(
-            org_id="org-1", agent_group_id="ag-1",
+            org_id="org-1", agent_group_id="ag-1", session_id="session-1",
             type=JobType.QUERY, payload="check logs",
         )
         job.dispatch_to("agent-1")
@@ -115,7 +122,7 @@ class TestJob:
 
     def test_fail_sets_error(self):
         job = Job(
-            org_id="org-1", agent_group_id="ag-1",
+            org_id="org-1", agent_group_id="ag-1", session_id="session-1",
             type=JobType.TRIAGE, payload="alert",
         )
         job.dispatch_to("agent-1")
@@ -127,7 +134,7 @@ class TestJob:
 
     def test_cancel_from_pending(self):
         job = Job(
-            org_id="org-1", agent_group_id="ag-1",
+            org_id="org-1", agent_group_id="ag-1", session_id="session-1",
             type=JobType.TRIAGE, payload="alert",
         )
         job.cancel()
@@ -136,9 +143,47 @@ class TestJob:
 
     def test_cancel_from_dispatched(self):
         job = Job(
-            org_id="org-1", agent_group_id="ag-1",
+            org_id="org-1", agent_group_id="ag-1", session_id="session-1",
             type=JobType.TRIAGE, payload="alert",
         )
         job.dispatch_to("agent-1")
         job.cancel()
         assert job.status == JobStatus.CANCELLED
+
+    def test_verify_transitions_to_verifying(self):
+        job = Job(
+            org_id="org-1", agent_group_id="ag-1", session_id="session-1",
+            type=JobType.REMEDIATE, payload="restart deployment",
+        )
+        job.dispatch_to("agent-1")
+        job.start()
+        job.verify()
+        assert job.status == JobStatus.VERIFYING
+
+
+class TestMessage:
+    def test_creation_defaults(self):
+        message = Message(
+            org_id="org-1",
+            session_id="session-1",
+            author_id="user-1",
+            author_type=AuthorType.HUMAN,
+            message_type=MessageType.HUMAN_MESSAGE,
+            content="hello",
+        )
+        assert message.id
+        assert message.job_id is None
+        assert message.metadata == {}
+        assert message.created_at.tzinfo is not None
+
+    def test_metadata_must_be_json_compatible(self):
+        with pytest.raises(ValidationError, match="JSON-compatible"):
+            Message(
+                org_id="org-1",
+                session_id="session-1",
+                author_id="user-1",
+                author_type=AuthorType.HUMAN,
+                message_type=MessageType.HUMAN_MESSAGE,
+                content="hello",
+                metadata={"bad": object()},
+            )
