@@ -237,6 +237,23 @@ class TestDispatchService:
         reverted = service.reassign_disconnected(agent.id)
         assert len(reverted) == 0
 
+    def test_disconnect_agent_marks_offline_and_requeues_running_job(self, service, fleet_repo, job_repo):
+        agent = service.register_agent("ag-1", "agent-01")
+        job = service.create_job("org-1", "ag-1", JobType.TRIAGE, "alert")
+        service.dispatch_pending("ag-1")
+        dispatched_job = job_repo.get_by_id(job.id)
+        assert dispatched_job is not None
+        dispatched_job.start()
+        job_repo.save(dispatched_job)
+
+        reverted = service.disconnect_agent(agent.id)
+
+        reloaded_agent = fleet_repo.get_agent(agent.id)
+        assert reloaded_agent is not None
+        assert reloaded_agent.status == AgentStatus.OFFLINE
+        assert len(reverted) == 1
+        assert reverted[0].status == JobStatus.PENDING
+
     def test_active_agent_counts_are_initialized_once(
         self,
         service,

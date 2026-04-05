@@ -2,19 +2,33 @@
 
 from __future__ import annotations
 
-import json
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import TypeAdapter, ValidationError
 
+from legion.api.schemas import (
+    AgentHeartbeatMessage,
+    AgentJobFailedMessage,
+    AgentJobResultMessage,
+    AgentJobStartedMessage,
+    AgentWebSocketMessage,
+)
 from legion.domain.agent import Agent
 from legion.domain.job import Job
+from legion.services.agent_delivery_service import AgentDeliveryService
 from legion.services.dispatch_service import DispatchService
-from legion.services.exceptions import AgentNotFoundError, InvalidSessionTokenError, SessionTokenMismatchError
+from legion.services.exceptions import (
+    AgentNotFoundError,
+    DispatchError,
+    InvalidSessionTokenError,
+    SessionTokenMismatchError,
+)
 from legion.services.fleet_repository import FleetRepository
 from legion.services.job_repository import JobRepository
 
 logger = logging.getLogger(__name__)
+_AGENT_MESSAGE_ADAPTER: TypeAdapter[AgentWebSocketMessage] = TypeAdapter(AgentWebSocketMessage)
 
 router = APIRouter()
 
@@ -63,12 +77,21 @@ def _extract_bearer_token(websocket: WebSocket) -> str | None:
     return token or None
 
 
+def _parse_agent_message(raw_message: str) -> AgentWebSocketMessage | None:
+    try:
+        return _AGENT_MESSAGE_ADAPTER.validate_json(raw_message)
+    except ValidationError:
+        logger.warning("Ignoring malformed agent websocket message: %s", raw_message)
+        return None
+
+
 @router.websocket("/ws/agents/{agent_id}")
 async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
     fleet_repo: FleetRepository = websocket.app.state.fleet_repo
     job_repo: JobRepository = websocket.app.state.job_repo
     dispatch_service: DispatchService = websocket.app.state.dispatch_service
     connection_manager: ConnectionManager = websocket.app.state.connection_manager
+    agent_delivery_service: AgentDeliveryService = websocket.app.state.agent_delivery_service
 
     session_token = _extract_bearer_token(websocket)
     if session_token is None:
@@ -90,51 +113,59 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
     fleet_repo.save_agent(agent)
 
     logger.info("Agent connected: %s", agent_id)
+    await agent_delivery_service.dispatch_pending_for_group(
+        agent.agent_group_id,
+        connection_manager.send_job_to_agent,
+    )
 
     try:
         while True:
             raw = await websocket.receive_text()
-            data = json.loads(raw)
-            msg_type = data.get("type")
+            message = _parse_agent_message(raw)
+            if message is None:
+                continue
 
-            if msg_type == "heartbeat":
+            if isinstance(message, AgentHeartbeatMessage):
                 dispatch_service.heartbeat(agent_id)
 
-            elif msg_type == "job_started":
-                job = job_repo.get_by_id(data["job_id"])
+            elif isinstance(message, AgentJobStartedMessage):
+                job = job_repo.get_by_id(message.job_id)
                 if job is not None:
                     job.start()
                     job_repo.save(job)
 
-            elif msg_type == "job_result":
-                dispatch_service.complete_job(data["job_id"], data["result"])
-                # Check for pending jobs
-                connected_agent = fleet_repo.get_agent(agent_id)
-                if connected_agent is not None:
-                    dispatched = dispatch_service.dispatch_pending(
-                        connected_agent.agent_group_id,
+            elif isinstance(message, AgentJobResultMessage):
+                try:
+                    dispatch_service.complete_job(message.job_id, message.result)
+                except DispatchError:
+                    logger.warning(
+                        "Ignoring job_result for unknown job %s from agent %s",
+                        message.job_id,
+                        agent_id,
                     )
-                    for d_job, d_agent in dispatched:
-                        await connection_manager.send_job_to_agent(d_job, d_agent)
+                    continue
+                await agent_delivery_service.dispatch_pending_for_group(
+                    agent.agent_group_id,
+                    connection_manager.send_job_to_agent,
+                )
 
-            elif msg_type == "job_failed":
-                dispatch_service.fail_job(data["job_id"], data.get("error", ""))
-                # Check for pending jobs
-                connected_agent = fleet_repo.get_agent(agent_id)
-                if connected_agent is not None:
-                    dispatched = dispatch_service.dispatch_pending(
-                        connected_agent.agent_group_id,
+            elif isinstance(message, AgentJobFailedMessage):
+                try:
+                    dispatch_service.fail_job(message.job_id, message.error)
+                except DispatchError:
+                    logger.warning(
+                        "Ignoring job_failed for unknown job %s from agent %s",
+                        message.job_id,
+                        agent_id,
                     )
-                    for d_job, d_agent in dispatched:
-                        await connection_manager.send_job_to_agent(d_job, d_agent)
+                    continue
+                await agent_delivery_service.dispatch_pending_for_group(
+                    agent.agent_group_id,
+                    connection_manager.send_job_to_agent,
+                )
 
     except WebSocketDisconnect:
         pass
     finally:
         await connection_manager.disconnect(agent_id)
-        disconnected_agent = fleet_repo.get_agent(agent_id)
-        if disconnected_agent is not None:
-            disconnected_agent.go_offline()
-            fleet_repo.save_agent(disconnected_agent)
-        dispatch_service.reassign_disconnected(agent_id)
-        logger.info("Agent disconnected: %s", agent_id)
+        dispatch_service.disconnect_agent(agent_id)

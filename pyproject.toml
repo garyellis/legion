@@ -25,12 +25,14 @@ dependencies = [
     "termgraph>=0.7.5",
     "typer>=0.23.1",
     "uvicorn[standard]>=0.41.0",
+    "websockets>=16,<17",
 ]
 
 [project.scripts]
 legion-cli = "legion.main:main"
 legion-dev = "legion.cli_dev.main:main"
 legion-api = "legion.api.main:main"
+legion-agent = "legion.agent_runner.main:main"
 legion-slack = "legion.slack.main:main"
 legion-slack-manifest = "legion.slack.manifest:main"
 

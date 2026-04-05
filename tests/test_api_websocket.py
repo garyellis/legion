@@ -157,6 +157,20 @@ class TestAgentWebSocket:
         reloaded = fleet_repo.get_agent("agent-ws-2")
         assert reloaded.last_heartbeat is not None
 
+    def test_malformed_messages_are_ignored_without_dropping_connection(self, client, fleet_repo):
+        raw_token = _seed_agent_and_token(client, fleet_repo, agent_id="agent-ws-2b")
+
+        with client.websocket_connect(
+            "/ws/agents/agent-ws-2b",
+            headers={"Authorization": f"Bearer {raw_token}"},
+        ) as ws:
+            ws.send_text("{bad-json")
+            ws.send_text(json.dumps({"type": "job_result", "job_id": "missing-job"}))
+            ws.send_text(json.dumps({"type": "heartbeat"}))
+
+        reloaded = fleet_repo.get_agent("agent-ws-2b")
+        assert reloaded.last_heartbeat is not None
+
     def test_disconnect_marks_offline(self, client, fleet_repo):
         raw_token = _seed_agent_and_token(client, fleet_repo, agent_id="agent-ws-3")
 

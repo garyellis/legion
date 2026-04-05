@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from legion.api.deps import get_dispatch_service, get_fleet_repo, get_session_repo
+from legion.api.deps import (
+    get_agent_delivery_service,
+    get_dispatch_service,
+    get_fleet_repo,
+    get_session_repo,
+)
 from legion.api.schemas import SessionCreate, SessionMessage
 from legion.domain.job import Job, JobType
 from legion.domain.session import Session, SessionStatus
+from legion.services.agent_delivery_service import AgentDeliveryService
 from legion.services.dispatch_service import DispatchService
 from legion.services.fleet_repository import FleetRepository
 from legion.services.session_repository import SessionRepository
@@ -59,6 +65,7 @@ async def send_message(
     request: Request,
     session_repo: SessionRepository = Depends(get_session_repo),
     dispatch_service: DispatchService = Depends(get_dispatch_service),
+    agent_delivery_service: AgentDeliveryService = Depends(get_agent_delivery_service),
 ) -> Job:
     session = session_repo.get_by_id(session_id)
     if session is None:
@@ -73,10 +80,10 @@ async def send_message(
         body.payload,
         session_id=session.id,
     )
-    dispatched = dispatch_service.dispatch_pending(session.agent_group_id)
-
     connection_manager = request.app.state.connection_manager
-    for d_job, d_agent in dispatched:
-        await connection_manager.send_job_to_agent(d_job, d_agent)
+    await agent_delivery_service.dispatch_pending_for_group(
+        session.agent_group_id,
+        connection_manager.send_job_to_agent,
+    )
 
     return job

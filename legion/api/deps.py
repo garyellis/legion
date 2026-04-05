@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from legion.services.agent_delivery_service import AgentDeliveryService
 from legion.services.dispatch_service import DispatchService
 from legion.services.agent_session_repository import AgentSessionRepository
 from legion.services.filter_service import FilterService
@@ -27,6 +28,10 @@ def get_session_repo(request: Request) -> SessionRepository:
 
 def get_dispatch_service(request: Request) -> DispatchService:
     return request.app.state.dispatch_service
+
+
+def get_agent_delivery_service(request: Request) -> AgentDeliveryService:
+    return request.app.state.agent_delivery_service
 
 
 def get_agent_session_repo(request: Request) -> AgentSessionRepository:

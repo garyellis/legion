@@ -7,6 +7,7 @@ These thin *Create / *Upsert schemas handle POST/PUT request bodies.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -74,6 +75,33 @@ class AgentRegistrationResponse(BaseModel):
     session_token: str
     session_token_expires_at: datetime
     config: AgentConnectionConfig
+
+
+class AgentHeartbeatMessage(BaseModel):
+    type: Literal["heartbeat"]
+
+
+class AgentJobStartedMessage(BaseModel):
+    type: Literal["job_started"]
+    job_id: str
+
+
+class AgentJobResultMessage(BaseModel):
+    type: Literal["job_result"]
+    job_id: str
+    result: str
+
+
+class AgentJobFailedMessage(BaseModel):
+    type: Literal["job_failed"]
+    job_id: str
+    error: str = ""
+
+
+AgentWebSocketMessage = Annotated[
+    AgentHeartbeatMessage | AgentJobStartedMessage | AgentJobResultMessage | AgentJobFailedMessage,
+    Field(discriminator="type"),
+]
 
 
 class ChannelMappingCreate(BaseModel):

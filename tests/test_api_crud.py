@@ -431,6 +431,34 @@ class TestSessions:
         assert resp.json()["status"] == "PENDING"
         assert resp.json()["session_id"] == session["id"]
 
+    def test_send_message_requeues_job_when_delivery_fails(self, client, app, fleet_repo, job_repo):
+        org, ag = self._create_org_and_group(client)
+        agent = Agent(agent_group_id=ag["id"], name="agent-01", status=AgentStatus.IDLE)
+        fleet_repo.save_agent(agent)
+
+        async def fail_send(_job, _agent):
+            raise RuntimeError("socket write failed")
+
+        app.state.connection_manager.send_job_to_agent = fail_send
+
+        session = client.post("/sessions/", json={
+            "org_id": org["id"], "agent_group_id": ag["id"],
+        }).json()
+        resp = client.post(
+            f"/sessions/{session['id']}/messages",
+            json={"payload": "what is the pod status?"},
+        )
+
+        assert resp.status_code == 201
+        persisted_job = job_repo.get_by_id(resp.json()["id"])
+        assert persisted_job is not None
+        assert persisted_job.status == JobStatus.PENDING
+        assert persisted_job.agent_id is None
+
+        reloaded_agent = fleet_repo.get_agent(agent.id)
+        assert reloaded_agent is not None
+        assert reloaded_agent.status == AgentStatus.OFFLINE
+
     def test_send_message_session_not_found(self, client):
         resp = client.post("/sessions/nope/messages", json={"payload": "hello"})
         assert resp.status_code == 404

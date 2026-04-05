@@ -378,6 +378,24 @@ class DispatchService:
         self.fleet_repo.save_agent(agent)
         return agent
 
+    def disconnect_agent(self, agent_id: str) -> list[Job]:
+        """Mark an agent offline and re-queue its in-flight work."""
+
+        agent = self.fleet_repo.get_agent(agent_id)
+        if agent is not None:
+            previous_status = agent.status
+            agent.go_offline()
+            self.fleet_repo.save_agent(agent)
+            self._record_active_agent_transition(
+                agent.agent_group_id,
+                previous_status,
+                agent.status,
+            )
+
+        reverted = self.reassign_disconnected(agent_id)
+        logger.info("Agent disconnected: %s", agent_id)
+        return reverted
+
     def reassign_disconnected(self, agent_id: str) -> list[Job]:
         """Revert DISPATCHED/RUNNING jobs for a disconnected agent back to PENDING."""
         jobs = self.job_repo.list_by_agent(agent_id)

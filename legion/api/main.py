@@ -29,6 +29,7 @@ from legion.plumbing.config.database import DatabaseConfig
 from legion.plumbing.database import create_engine
 from legion.plumbing.migrations import validate_database_schema_current
 from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
+from legion.services.agent_delivery_service import AgentDeliveryService
 from legion.services.agent_session_repository import AgentSessionRepository
 from legion.services.agent_session_repository import SQLiteAgentSessionRepository
 from legion.services.dispatch_service import DispatchService
@@ -124,6 +125,9 @@ def create_app(
         )
         app.state.filter_service = FilterService()
         app.state.connection_manager = ConnectionManager()
+        app.state.agent_delivery_service = AgentDeliveryService(
+            app.state.dispatch_service,
+        )
 
         logger.info("API started")
         yield

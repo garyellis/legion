@@ -34,7 +34,7 @@ LAYER_ALLOWED_IMPORTS: dict[str, set[str]] = {
     "agents": {"plumbing", "core", "domain", "services"},      # everything below
 }
 
-SURFACES = {"cli", "cli_dev", "slack", "api", "tui"}
+SURFACES = {"cli", "cli_dev", "slack", "api", "tui", "agent_runner"}
 
 # Surfaces can import from all non-surface layers, but never from other surfaces.
 SURFACE_ALLOWED_IMPORTS = {"plumbing", "internal", "core", "domain", "services", "agents"}
