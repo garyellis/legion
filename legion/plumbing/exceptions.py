@@ -41,3 +41,11 @@ class LegionError(Exception):
 
 class CoreError(LegionError):
     """Base for all core/ layer exceptions (infrastructure clients)."""
+
+
+class DatabaseSchemaError(LegionError):
+    """Base for migration and schema-state failures."""
+
+
+class DatabaseSchemaOutOfDateError(DatabaseSchemaError):
+    """Raised when a database is behind the repo's Alembic head."""

@@ -25,13 +25,20 @@ from legion.api.routes import (
     sessions,
 )
 from legion.api.websocket import ConnectionManager, router as ws_router
+from legion.plumbing.config.database import DatabaseConfig
+from legion.plumbing.database import create_engine
+from legion.plumbing.migrations import validate_database_schema_current
 from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
 from legion.services.agent_session_repository import AgentSessionRepository
+from legion.services.agent_session_repository import SQLiteAgentSessionRepository
 from legion.services.dispatch_service import DispatchService
 from legion.services.filter_service import FilterService
 from legion.services.fleet_repository import FleetRepository
+from legion.services.fleet_repository import SQLiteFleetRepository
 from legion.services.job_repository import JobRepository
+from legion.services.job_repository import SQLiteJobRepository
 from legion.services.session_repository import SessionRepository
+from legion.services.session_repository import SQLiteSessionRepository
 from legion.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
@@ -91,19 +98,11 @@ def create_app(
             app.state.session_repo = session_repo
             app.state.agent_session_repo = agent_session_repo
         else:
-            from legion.plumbing.config.database import DatabaseConfig
-            from legion.plumbing.database import create_all, create_engine
-
             db_config = DatabaseConfig()
             engine = create_engine(
                 db_config.url, echo=db_config.echo, pool_pre_ping=db_config.pool_pre_ping,
             )
-            create_all(engine)
-
-            from legion.services.fleet_repository import SQLiteFleetRepository
-            from legion.services.job_repository import SQLiteJobRepository
-            from legion.services.agent_session_repository import SQLiteAgentSessionRepository
-            from legion.services.session_repository import SQLiteSessionRepository
+            validate_database_schema_current(engine)
 
             app.state.fleet_repo = SQLiteFleetRepository(engine)
             app.state.job_repo = SQLiteJobRepository(engine)

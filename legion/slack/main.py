@@ -3,6 +3,8 @@
 Wires infrastructure, domain services, and incident handlers.
 """
 
+from __future__ import annotations
+
 import asyncio
 import importlib
 import logging
@@ -14,8 +16,9 @@ from slack_bolt.async_app import AsyncApp
 from legion.core.slack.client import SlackClient
 from legion.core.slack.config import SlackConfig
 from legion.plumbing.config.database import DatabaseConfig
-from legion.plumbing.database import create_all, create_engine
+from legion.plumbing.database import create_engine
 from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
+from legion.plumbing.migrations import validate_database_schema_current
 from legion.plumbing.scheduler import SchedulerService
 from legion.services.incident_service import IncidentService
 from legion.services.repository import SQLiteIncidentRepository
@@ -74,7 +77,7 @@ async def start_socket_mode(slack_config: SlackConfig) -> None:
     engine = create_engine(
         db_config.url, echo=db_config.echo, pool_pre_ping=db_config.pool_pre_ping
     )
-    create_all(engine)
+    validate_database_schema_current(engine)
 
     repository = SQLiteIncidentRepository(engine)
     slack_index: SlackIncidentIndex = SQLiteSlackIncidentIndex(engine)

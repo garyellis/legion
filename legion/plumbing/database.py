@@ -19,6 +19,11 @@ class Base(DeclarativeBase):
     pass
 
 
+def is_in_memory_sqlite_url(db_url: str) -> bool:
+    """Return whether the URL points at SQLite's in-memory database."""
+    return db_url.startswith("sqlite") and ":memory:" in db_url
+
+
 def create_engine(db_url: str, **kwargs: Any) -> Engine:
     """Create a SQLAlchemy engine with sensible defaults.
 
@@ -33,12 +38,12 @@ def create_engine(db_url: str, **kwargs: Any) -> Engine:
         kwargs["connect_args"] = connect_args
 
         # In-memory SQLite needs StaticPool so all connections share one DB.
-        if ":memory:" in db_url:
+        if is_in_memory_sqlite_url(db_url):
             kwargs.setdefault("poolclass", StaticPool)
 
     return _sa_create_engine(db_url, **kwargs)  # type: ignore[arg-type]
 
 
 def create_all(engine: Engine) -> None:
-    """Create all registered tables."""
+    """Create all registered tables directly from ORM metadata."""
     Base.metadata.create_all(engine)
