@@ -13,13 +13,18 @@ from sqlalchemy.orm import sessionmaker
 
 from legion.domain.message import Message, MessageType, AuthorType
 from legion.plumbing.database import Base
+from legion.services.pagination import Page, decode_cursor, encode_cursor
 
 logger = logging.getLogger(__name__)
+
+MAX_PAGE_SIZE = 200
 
 
 class MessageRepository(ABC):
     @abstractmethod
-    def save(self, message: Message) -> None: ...
+    def save(self, message: Message) -> None:
+        """Persist a message. Creates or updates if the id already exists (upsert)."""
+        ...
 
     @abstractmethod
     def get_by_id(self, message_id: str) -> Optional[Message]: ...
@@ -29,6 +34,27 @@ class MessageRepository(ABC):
 
     @abstractmethod
     def list_by_job(self, job_id: str) -> list[Message]: ...
+
+    @abstractmethod
+    def list_by_session_paginated(
+        self,
+        session_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int = 50,
+    ) -> Page[Message]: ...
+
+    @abstractmethod
+    def list_by_job_paginated(
+        self,
+        job_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int = 50,
+    ) -> Page[Message]: ...
+
+    @abstractmethod
+    def purge_before(self, cutoff: datetime) -> int: ...
 
 
 class MessageRow(Base):
@@ -42,6 +68,8 @@ class MessageRow(Base):
     message_type = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     job_id = Column(String, nullable=True)
+    # Column named "metadata" in SQL; aliased to metadata_json to avoid
+    # collision with SQLAlchemy DeclarativeBase.metadata.
     metadata_json = Column("metadata", Text, nullable=False, default="{}")
     created_at = Column(DateTime(timezone=True), nullable=False)
 
@@ -95,6 +123,79 @@ class SQLiteMessageRepository(MessageRepository):
                 .all()
             )
             return [self._to_domain(row) for row in rows]
+
+    def list_by_session_paginated(
+        self,
+        session_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int = 50,
+    ) -> Page[Message]:
+        return self._paginated_query(
+            filter_column=MessageRow.session_id,
+            filter_value=session_id,
+            cursor=cursor,
+            page_size=page_size,
+        )
+
+    def list_by_job_paginated(
+        self,
+        job_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int = 50,
+    ) -> Page[Message]:
+        return self._paginated_query(
+            filter_column=MessageRow.job_id,
+            filter_value=job_id,
+            cursor=cursor,
+            page_size=page_size,
+        )
+
+    def purge_before(self, cutoff: datetime) -> int:
+        with self._session_factory() as session:
+            count = (
+                session.query(MessageRow)
+                .filter(MessageRow.created_at < cutoff)
+                .delete(synchronize_session=False)
+            )
+            session.commit()
+            return count
+
+    def _paginated_query(
+        self,
+        *,
+        filter_column: Any,
+        filter_value: str,
+        cursor: str | None,
+        page_size: int,
+    ) -> Page[Message]:
+        page_size = max(1, min(page_size, MAX_PAGE_SIZE))
+        with self._session_factory() as session:
+            query = (
+                session.query(MessageRow)
+                .filter(filter_column == filter_value)
+            )
+            if cursor is not None:
+                cursor_ts, cursor_id = decode_cursor(cursor)
+                query = query.filter(
+                    (MessageRow.created_at > cursor_ts)
+                    | (
+                        (MessageRow.created_at == cursor_ts)
+                        & (MessageRow.id > cursor_id)
+                    )
+                )
+            query = query.order_by(
+                MessageRow.created_at.asc(), MessageRow.id.asc()
+            )
+            rows = query.limit(page_size + 1).all()
+            has_more = len(rows) > page_size
+            items = [self._to_domain(row) for row in rows[:page_size]]
+            next_cursor: str | None = None
+            if has_more and items:
+                last = items[-1]
+                next_cursor = encode_cursor(last.created_at, last.id)
+            return Page(items=items, next_cursor=next_cursor, has_more=has_more)
 
     @staticmethod
     def _ensure_utc(dt: datetime | None) -> datetime | None:

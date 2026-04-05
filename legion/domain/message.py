@@ -9,6 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from legion.plumbing.validation import ensure_json_compatible
+
 
 class AuthorType(str, Enum):
     HUMAN = "HUMAN"
@@ -27,24 +29,19 @@ class MessageType(str, Enum):
     STATUS_UPDATE = "STATUS_UPDATE"
 
 
-def _ensure_json_compatible(value: Any, *, path: str) -> None:
-    if value is None or isinstance(value, str | int | float | bool):
-        return
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            _ensure_json_compatible(item, path=f"{path}[{index}]")
-        return
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise ValueError(f"{path} must use string keys")
-            _ensure_json_compatible(item, path=f"{path}.{key}")
-        return
-    raise ValueError(f"{path} must contain only JSON-compatible values")
-
-
 class Message(BaseModel):
-    """A structured timeline entry attached to a session and optionally a job."""
+    """Human-oriented timeline entry within a session.
+
+    Messages represent information a person would see: findings, proposals,
+    status updates, approval requests, and system notifications.  They carry
+    a natural-language content string and optional structured metadata, but
+    never raw tool I/O.
+
+    Messages are addressed to the session timeline and may span multiple jobs
+    or have no job at all (system events).  Emit a Message when an agent
+    produces a conclusion or needs human attention.  Do *not* use Message as a
+    substitute for AuditEvent — tool-level detail belongs in the audit trail.
+    """
 
     model_config = {"validate_assignment": True}
 
@@ -62,5 +59,5 @@ class Message(BaseModel):
     @field_validator("metadata")
     @classmethod
     def _validate_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
-        _ensure_json_compatible(value, path="metadata")
+        ensure_json_compatible(value, path="metadata")
         return value

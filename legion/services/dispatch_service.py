@@ -9,11 +9,12 @@ from collections import Counter
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Any, Callable
 
 from legion.domain.agent import Agent, AgentStatus
 from legion.domain.agent_auth import AgentGroupTokenRotationResult, AgentRegistrationResult, AgentSessionToken
 from legion.domain.job import Job, JobStatus, JobType
+from legion.domain.message import AuthorType, Message, MessageType
 from legion.domain.session import Session
 from legion.plumbing import telemetry
 from legion.plumbing.tokens import generate_token, hash_token
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 # Callback type aliases
 OnJobDispatched = Callable[[Job, Agent], None]
 OnNoAgentsAvailable = Callable[[Job], None]
+OnMessageEmit = Callable[[Message], None]
 
 
 def _observe_job_duration(job: Job) -> None:
@@ -66,6 +68,7 @@ class DispatchService:
         agent_session_token_ttl_seconds: int = 3600,
         on_job_dispatched: OnJobDispatched | None = None,
         on_no_agents_available: OnNoAgentsAvailable | None = None,
+        on_message_emit: OnMessageEmit | None = None,
     ) -> None:
         self.fleet_repo = fleet_repo
         self.job_repo = job_repo
@@ -74,6 +77,7 @@ class DispatchService:
         self._agent_session_token_ttl_seconds = agent_session_token_ttl_seconds
         self._on_dispatched = on_job_dispatched
         self._on_no_agents = on_no_agents_available
+        self._on_message_emit = on_message_emit
         self._active_agent_counts: dict[str, dict[str, int]] = {}
 
     def _ensure_active_agent_counts(self, agent_group_id: str) -> None:
@@ -118,6 +122,24 @@ class DispatchService:
         telemetry.active_agents.labels(agent_group_id, current.value).set(
             counts[current.value],
         )
+
+    def _emit_system_event(self, *, session_id: str, org_id: str, content: str, job_id: str | None = None, metadata: dict[str, Any] | None = None) -> None:
+        if not self._on_message_emit:
+            return
+        try:
+            message = Message(
+                session_id=session_id,
+                org_id=org_id,
+                author_type=AuthorType.SYSTEM,
+                author_id="system",
+                message_type=MessageType.SYSTEM_EVENT,
+                content=content,
+                job_id=job_id,
+                metadata=metadata or {},
+            )
+            self._on_message_emit(message)
+        except Exception:
+            logger.error("Failed to emit system event: %s", content, exc_info=True)
 
     def create_job(
         self,
@@ -173,6 +195,13 @@ class DispatchService:
             raise
         telemetry.jobs_created_total.labels(org_id, job_type.value).inc()
         logger.info("Job created: %s (%s)", job.id, job.type.value)
+        self._emit_system_event(
+            session_id=job.session_id,
+            org_id=job.org_id,
+            content="Job created",
+            job_id=job.id,
+            metadata={"job_id": job.id, "job_type": job.type.value, "status": job.status.value},
+        )
         return job
 
     def dispatch_pending(self, agent_group_id: str) -> list[tuple[Job, Agent]]:
@@ -221,6 +250,14 @@ class DispatchService:
             if self._on_dispatched:
                 self._on_dispatched(job, agent)
 
+            self._emit_system_event(
+                session_id=job.session_id,
+                org_id=job.org_id,
+                content=f"Job dispatched to agent {agent.name}",
+                job_id=job.id,
+                metadata={"job_id": job.id, "agent_id": agent.id, "agent_name": agent.name, "status": job.status.value},
+            )
+
         telemetry.dispatch_latency_seconds.observe(time.perf_counter() - start)
         return dispatched
 
@@ -252,6 +289,13 @@ class DispatchService:
                 )
 
         logger.info("Job completed: %s", job_id)
+        self._emit_system_event(
+            session_id=job.session_id,
+            org_id=job.org_id,
+            content="Job completed",
+            job_id=job.id,
+            metadata={"job_id": job.id, "status": job.status.value},
+        )
         return job
 
     def fail_job(self, job_id: str, error: str, *, agent_id: str | None = None) -> Job:
@@ -282,6 +326,13 @@ class DispatchService:
                 )
 
         logger.info("Job failed: %s — %s", job_id, error)
+        self._emit_system_event(
+            session_id=job.session_id,
+            org_id=job.org_id,
+            content=f"Job failed: {error}",
+            job_id=job.id,
+            metadata={"job_id": job.id, "status": job.status.value, "error": error},
+        )
         return job
 
     def register_agent(

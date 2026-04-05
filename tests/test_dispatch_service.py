@@ -9,6 +9,7 @@ import pytest
 from legion.domain.agent import AgentStatus
 from legion.domain.agent_group import AgentGroup
 from legion.domain.job import JobStatus, JobType
+from legion.domain.message import AuthorType, Message, MessageType
 from legion.domain.session import Session
 from legion.plumbing.database import create_all, create_engine
 from legion.services.dispatch_service import DispatchService
@@ -541,3 +542,110 @@ class TestDispatchService:
 
         assert before + timedelta(seconds=90) <= result.session_token_expires_at + timedelta(seconds=1)
         assert result.session_token_expires_at <= after + timedelta(seconds=91)
+
+    def test_create_job_emits_system_event(self, fleet_repo, job_repo, session_repo):
+        emitted: list[Message] = []
+        svc = DispatchService(
+            fleet_repo, job_repo, session_repo,
+            on_message_emit=lambda msg: emitted.append(msg),
+        )
+        job = svc.create_job("org-1", "ag-1", JobType.TRIAGE, "alert fired")
+
+        assert len(emitted) == 1
+        msg = emitted[0]
+        assert msg.message_type == MessageType.SYSTEM_EVENT
+        assert msg.author_type == AuthorType.SYSTEM
+        assert msg.job_id == job.id
+        assert msg.session_id == job.session_id
+        assert "Job created" in msg.content
+        assert "job_id" in msg.metadata
+        assert msg.metadata["job_id"] == job.id
+        assert "status" in msg.metadata
+        assert "job_type" in msg.metadata
+
+    def test_dispatch_pending_emits_system_event(self, fleet_repo, job_repo, session_repo):
+        emitted: list[Message] = []
+        svc = DispatchService(
+            fleet_repo, job_repo, session_repo,
+            on_message_emit=lambda msg: emitted.append(msg),
+        )
+        agent = svc.register_agent("ag-1", "agent-01")
+        svc.create_job("org-1", "ag-1", JobType.TRIAGE, "alert")
+        emitted.clear()  # discard the create_job event
+
+        svc.dispatch_pending("ag-1")
+
+        assert len(emitted) == 1
+        msg = emitted[0]
+        assert msg.message_type == MessageType.SYSTEM_EVENT
+        assert msg.author_type == AuthorType.SYSTEM
+        assert agent.name in msg.content
+        assert "agent_id" in msg.metadata
+        assert "agent_name" in msg.metadata
+        assert "job_id" in msg.metadata
+
+    def test_complete_job_emits_system_event(self, fleet_repo, job_repo, session_repo):
+        emitted: list[Message] = []
+        svc = DispatchService(
+            fleet_repo, job_repo, session_repo,
+            on_message_emit=lambda msg: emitted.append(msg),
+        )
+        agent = svc.register_agent("ag-1", "agent-01")
+        job = svc.create_job("org-1", "ag-1", JobType.TRIAGE, "alert")
+        svc.dispatch_pending("ag-1")
+        job = job_repo.get_by_id(job.id)
+        job.start()
+        job_repo.save(job)
+        emitted.clear()
+
+        svc.complete_job(job.id, "incident resolved")
+
+        assert len(emitted) == 1
+        msg = emitted[0]
+        assert msg.message_type == MessageType.SYSTEM_EVENT
+        assert msg.author_type == AuthorType.SYSTEM
+        assert "Job completed" in msg.content
+        assert msg.metadata["job_id"] == job.id
+        assert msg.metadata["status"] == "COMPLETED"
+
+    def test_fail_job_emits_system_event(self, fleet_repo, job_repo, session_repo):
+        emitted: list[Message] = []
+        svc = DispatchService(
+            fleet_repo, job_repo, session_repo,
+            on_message_emit=lambda msg: emitted.append(msg),
+        )
+        agent = svc.register_agent("ag-1", "agent-01")
+        job = svc.create_job("org-1", "ag-1", JobType.TRIAGE, "alert")
+        svc.dispatch_pending("ag-1")
+        job = job_repo.get_by_id(job.id)
+        job.start()
+        job_repo.save(job)
+        emitted.clear()
+
+        svc.fail_job(job.id, "connection timeout")
+
+        assert len(emitted) == 1
+        msg = emitted[0]
+        assert msg.message_type == MessageType.SYSTEM_EVENT
+        assert msg.author_type == AuthorType.SYSTEM
+        assert "Job failed" in msg.content
+        assert "connection timeout" in msg.content
+        assert msg.metadata["job_id"] == job.id
+        assert "error" in msg.metadata
+        assert msg.metadata["error"] == "connection timeout"
+
+    def test_no_message_emit_without_callback(self, service):
+        agent = service.register_agent("ag-1", "agent-01")
+        job = service.create_job("org-1", "ag-1", JobType.TRIAGE, "alert")
+        service.dispatch_pending("ag-1")
+        job = service.job_repo.get_by_id(job.id)
+        job.start()
+        service.job_repo.save(job)
+        service.complete_job(job.id, "done")
+
+        job2 = service.create_job("org-1", "ag-1", JobType.TRIAGE, "alert2")
+        service.dispatch_pending("ag-1")
+        job2 = service.job_repo.get_by_id(job2.id)
+        job2.start()
+        service.job_repo.save(job2)
+        service.fail_job(job2.id, "boom")

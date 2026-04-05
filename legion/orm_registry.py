@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from legion.services import agent_session_repository  # noqa: F401
+from legion.services import audit_event_repository  # noqa: F401
 from legion.services import fleet_repository  # noqa: F401
 from legion.services import job_repository  # noqa: F401
 from legion.services import message_repository  # noqa: F401
