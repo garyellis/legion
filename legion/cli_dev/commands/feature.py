@@ -5,11 +5,13 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.table import Table
 
 from legion.plumbing.registry import register_command
 from legion.cli_dev.views import console, print_message, render_error
 from legion.internal.feature import (
     build_feature_handoff_prompt,
+    feature_docs_dir,
     find_feature_file,
     parse_feature_document,
     feature_filepath,
@@ -83,6 +85,42 @@ def feature_show(
     print_message(f"Date:   {doc.date or 'UNKNOWN'}", style="cyan")
     print_message(f"File:   {path.relative_to(_root)}", style="cyan")
     console.print(doc.content, markup=False)
+
+
+@register_command("feature", "list")
+def feature_list() -> None:
+    """List all feature briefs in docs/features/."""
+    root = _project_root()
+    docs_dir = feature_docs_dir(root)
+    if not docs_dir.exists():
+        print_message("No feature briefs found in docs/features/.", style="yellow")
+        return
+
+    paths = sorted(
+        path
+        for path in docs_dir.iterdir()
+        if path.is_file() and path.suffix == ".md" and path.name != ".gitkeep"
+    )
+    if not paths:
+        print_message("No feature briefs found in docs/features/.", style="yellow")
+        return
+
+    table = Table(title="Feature Briefs")
+    table.add_column("Title")
+    table.add_column("Status", style="cyan")
+    table.add_column("Date", style="cyan")
+    table.add_column("File", style="dim")
+
+    for path in paths:
+        doc = parse_feature_document(path)
+        table.add_row(
+            doc.title,
+            doc.status or "UNKNOWN",
+            doc.date or "UNKNOWN",
+            str(doc.filepath.relative_to(root)),
+        )
+
+    console.print(table)
 
 
 @register_command("feature", "handoff")

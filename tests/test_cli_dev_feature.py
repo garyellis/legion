@@ -4,8 +4,14 @@ from pathlib import Path
 
 import pytest
 import typer
+from rich.table import Table
 
-from legion.cli_dev.commands.feature import feature_create, feature_handoff, feature_show
+from legion.cli_dev.commands.feature import (
+    feature_create,
+    feature_handoff,
+    feature_list,
+    feature_show,
+)
 from legion.internal.feature import (
     build_feature_handoff_prompt,
     feature_docs_dir,
@@ -211,3 +217,72 @@ class TestFeatureShowAndHandoff:
         )
         with pytest.raises(typer.Exit):
             feature_handoff(title="Missing Brief")
+
+
+class TestFeatureList:
+    def test_lists_existing_briefs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        docs_dir = tmp_path / "docs" / "features"
+        docs_dir.mkdir(parents=True)
+        (docs_dir / ".gitkeep").write_text("", encoding="utf-8")
+        (docs_dir / "beta.md").write_text(
+            generate_feature_template(title="Beta Feature", created_date="2026-04-04"),
+            encoding="utf-8",
+        )
+        (docs_dir / "alpha.md").write_text(
+            generate_feature_template(title="Alpha Feature", created_date="2026-04-03"),
+            encoding="utf-8",
+        )
+
+        captured: list[Table] = []
+
+        def fake_print(value: Table, *args, **kwargs) -> None:
+            captured.append(value)
+
+        monkeypatch.setattr("legion.cli_dev.commands.feature._project_root", lambda: tmp_path)
+        monkeypatch.setattr("legion.cli_dev.commands.feature.console.print", fake_print)
+
+        feature_list()
+
+        assert len(captured) == 1
+        table = captured[0]
+        assert [column.header for column in table.columns] == ["Title", "Status", "Date", "File"]
+        assert table.columns[0]._cells == ["Alpha Feature", "Beta Feature"]
+        assert table.columns[1]._cells == ["DRAFT", "DRAFT"]
+        assert table.columns[2]._cells == ["2026-04-03", "2026-04-04"]
+        assert table.columns[3]._cells == ["docs/features/alpha.md", "docs/features/beta.md"]
+
+    def test_lists_unknown_metadata_when_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        docs_dir = tmp_path / "docs" / "features"
+        docs_dir.mkdir(parents=True)
+        (docs_dir / "missing-metadata.md").write_text(
+            "# Feature Requirements Gate: Missing Metadata\n",
+            encoding="utf-8",
+        )
+
+        captured: list[Table] = []
+
+        def fake_print(value: Table, *args, **kwargs) -> None:
+            captured.append(value)
+
+        monkeypatch.setattr("legion.cli_dev.commands.feature._project_root", lambda: tmp_path)
+        monkeypatch.setattr("legion.cli_dev.commands.feature.console.print", fake_print)
+
+        feature_list()
+
+        table = captured[0]
+        assert table.columns[0]._cells == ["Missing Metadata"]
+        assert table.columns[1]._cells == ["UNKNOWN"]
+        assert table.columns[2]._cells == ["UNKNOWN"]
+
+    def test_lists_empty_state(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        messages: list[tuple[str, str]] = []
+
+        def fake_message(message: str, style: str = "") -> None:
+            messages.append((message, style))
+
+        monkeypatch.setattr("legion.cli_dev.commands.feature._project_root", lambda: tmp_path)
+        monkeypatch.setattr("legion.cli_dev.commands.feature.print_message", fake_message)
+
+        feature_list()
+
+        assert messages == [("No feature briefs found in docs/features/.", "yellow")]
