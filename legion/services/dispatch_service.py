@@ -189,7 +189,22 @@ class DispatchService:
                     self._on_no_agents(job)
                 continue
 
-            agent = idle.pop(0)
+            required = set(job.required_capabilities)
+            capable_idx = next(
+                (
+                    i
+                    for i, candidate in enumerate(idle)
+                    if required <= set(candidate.capabilities)
+                ),
+                None,
+            )
+            if capable_idx is None:
+                telemetry.dispatch_capability_skips_total.labels(agent_group_id).inc()
+                if self._on_no_agents:
+                    self._on_no_agents(job)
+                continue
+
+            agent = idle.pop(capable_idx)
             previous_status = agent.status
             job.dispatch_to(agent.id)
             agent.go_busy(job.id)

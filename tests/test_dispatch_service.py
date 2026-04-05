@@ -254,6 +254,166 @@ class TestDispatchService:
         assert len(reverted) == 1
         assert reverted[0].status == JobStatus.PENDING
 
+    def test_dispatch_pending_matches_agent_by_capabilities(self, service, fleet_repo):
+        agent_k8s = service.register_agent("ag-1", "agent-k8s", ["kubernetes", "logs"])
+        agent_logs = service.register_agent("ag-1", "agent-logs", ["logs"])
+        job = service.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert",
+            required_capabilities=["kubernetes"],
+        )
+
+        dispatched = service.dispatch_pending("ag-1")
+        assert len(dispatched) == 1
+        d_job, d_agent = dispatched[0]
+        assert d_agent.id == agent_k8s.id
+
+    def test_dispatch_pending_skips_incapable_agent(self, service, fleet_repo):
+        agent_logs = service.register_agent("ag-1", "agent-logs", ["logs"])
+        agent_k8s = service.register_agent("ag-1", "agent-k8s", ["kubernetes", "logs"])
+        job = service.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert",
+            required_capabilities=["kubernetes"],
+        )
+
+        dispatched = service.dispatch_pending("ag-1")
+        assert len(dispatched) == 1
+        d_job, d_agent = dispatched[0]
+        assert d_agent.id == agent_k8s.id
+
+        reloaded_logs = fleet_repo.get_agent(agent_logs.id)
+        assert reloaded_logs.status == AgentStatus.IDLE
+
+    def test_dispatch_pending_no_capable_agent_fires_callback(
+        self, fleet_repo, job_repo, session_repo,
+    ):
+        no_agent_jobs = []
+        svc = DispatchService(
+            fleet_repo, job_repo, session_repo,
+            on_no_agents_available=lambda job: no_agent_jobs.append(job.id),
+        )
+        svc.register_agent("ag-1", "agent-logs", ["logs"])
+        job = svc.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert",
+            required_capabilities=["kubernetes"],
+        )
+        svc.dispatch_pending("ag-1")
+        assert job.id in no_agent_jobs
+
+        reloaded_job = job_repo.get_by_id(job.id)
+        assert reloaded_job.status == JobStatus.PENDING
+
+    def test_dispatch_pending_capable_agent_consumed_by_first_job(
+        self, service, fleet_repo, job_repo,
+    ):
+        service.register_agent("ag-1", "agent-k8s", ["kubernetes"])
+        service.register_agent("ag-1", "agent-logs", ["logs"])
+        job_a = service.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert-a",
+            required_capabilities=["kubernetes"],
+        )
+        job_b = service.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert-b",
+            required_capabilities=["kubernetes"],
+        )
+
+        dispatched = service.dispatch_pending("ag-1")
+        assert len(dispatched) == 1
+        d_job, d_agent = dispatched[0]
+        assert d_job.id == job_a.id
+
+        reloaded_b = job_repo.get_by_id(job_b.id)
+        assert reloaded_b.status == JobStatus.PENDING
+
+    def test_dispatch_pending_mixed_capabilities_single_cycle(
+        self, service, fleet_repo,
+    ):
+        agent_k8s = service.register_agent("ag-1", "agent-k8s", ["kubernetes"])
+        agent_logs = service.register_agent("ag-1", "agent-logs", ["logs"])
+        job_a = service.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert-k8s",
+            required_capabilities=["kubernetes"],
+        )
+        job_b = service.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert-logs",
+            required_capabilities=["logs"],
+        )
+
+        dispatched = service.dispatch_pending("ag-1")
+        assert len(dispatched) == 2
+
+        dispatched_map = {d_job.id: d_agent for d_job, d_agent in dispatched}
+        assert dispatched_map[job_a.id].id == agent_k8s.id
+        assert dispatched_map[job_b.id].id == agent_logs.id
+
+    def test_dispatch_pending_contention_callback_fires_for_second_job(
+        self, fleet_repo, job_repo, session_repo,
+    ):
+        no_agent_jobs = []
+        svc = DispatchService(
+            fleet_repo, job_repo, session_repo,
+            on_no_agents_available=lambda job: no_agent_jobs.append(job.id),
+        )
+        svc.register_agent("ag-1", "agent-k8s", ["kubernetes"])
+        job_a = svc.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert-a",
+            required_capabilities=["kubernetes"],
+        )
+        job_b = svc.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert-b",
+            required_capabilities=["kubernetes"],
+        )
+
+        dispatched = svc.dispatch_pending("ag-1")
+        assert len(dispatched) == 1
+        assert dispatched[0][0].id == job_a.id
+        assert job_b.id in no_agent_jobs
+
+    def test_dispatch_pending_empty_capabilities_matches_any_agent(self, service, fleet_repo):
+        agent = service.register_agent("ag-1", "agent-01")
+        job = service.create_job("org-1", "ag-1", JobType.TRIAGE, "alert")
+
+        dispatched = service.dispatch_pending("ag-1")
+        assert len(dispatched) == 1
+        d_job, d_agent = dispatched[0]
+        assert d_agent.id == agent.id
+
+    def test_dispatch_pending_requires_all_capabilities(self, service, fleet_repo):
+        agent_partial = service.register_agent("ag-1", "agent-partial", ["kubernetes"])
+        agent_full = service.register_agent(
+            "ag-1", "agent-full", ["kubernetes", "logs", "metrics"],
+        )
+        job = service.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert",
+            required_capabilities=["kubernetes", "logs"],
+        )
+
+        dispatched = service.dispatch_pending("ag-1")
+        assert len(dispatched) == 1
+        d_job, d_agent = dispatched[0]
+        assert d_agent.id == agent_full.id
+
+    def test_dispatch_pending_capability_skip_counter(
+        self, fleet_repo, job_repo, session_repo, monkeypatch: pytest.MonkeyPatch,
+    ):
+        from tests.test_plumbing_telemetry import _RecorderMetric
+
+        skip_counter = _RecorderMetric()
+        monkeypatch.setattr(
+            "legion.services.dispatch_service.telemetry.dispatch_capability_skips_total",
+            skip_counter,
+        )
+
+        svc = DispatchService(fleet_repo, job_repo, session_repo)
+        svc.register_agent("ag-1", "agent-logs", ["logs"])
+        svc.create_job(
+            "org-1", "ag-1", JobType.TRIAGE, "alert",
+            required_capabilities=["kubernetes"],
+        )
+        svc.dispatch_pending("ag-1")
+
+        assert ("labels", ("ag-1",)) in skip_counter.calls
+        assert ("inc", ()) in skip_counter.calls
+
     def test_active_agent_counts_are_initialized_once(
         self,
         service,

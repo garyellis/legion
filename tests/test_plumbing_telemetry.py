@@ -122,6 +122,10 @@ def test_new_filter_metrics_follow_noop_contract() -> None:
     telemetry.filter_evaluation_duration_seconds.observe(0.1)
 
 
+def test_dispatch_capability_skips_metric_follows_noop_contract() -> None:
+    telemetry.dispatch_capability_skips_total.labels("ag-1").inc()
+
+
 def test_get_tool_meta_returns_none_for_undecorated() -> None:
     def plain() -> None:
         return None

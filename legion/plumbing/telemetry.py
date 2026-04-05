@@ -113,6 +113,11 @@ filter_evaluation_duration_seconds = _histogram(
     "filter_evaluation_duration_seconds",
     "Latency for FilterService evaluations.",
 )
+dispatch_capability_skips_total = _counter(
+    "dispatch_capability_skips_total",
+    "Total times a job was skipped due to no capable idle agent.",
+    ("agent_group_id",),
+)
 
 
 def metrics_available() -> bool:
