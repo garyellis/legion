@@ -101,7 +101,7 @@ def main() -> None:
     agents_body = agents.json()
     print(f"\nAgents in agent group: {len(agents_body)}")
     if not agents_body:
-        print("  (none yet — start demo_agent.py or docker compose --profile demo up)")
+        print("  (none yet — start legion-agent via docker compose --profile demo up)")
 
     session = client.post("/sessions/", json={
         "org_id": org["id"],

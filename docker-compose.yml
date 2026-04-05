@@ -68,6 +68,21 @@ services:
   #     api:
   #       condition: service_healthy
 
+  agent-runner:
+    build: .
+    command: python local/compose_agent_runner.py
+    environment:
+      LEGION_API_URL: "http://api:8000"
+      LEGION_AGENT_NAME: "demo-agent-1"
+      AGENT_RUNNER_CAPABILITIES: "demo"
+      AGENT_RUNNER_LOG_LEVEL: "INFO"
+      AGENT_RUNNER_LOG_FORMAT: "TEXT"
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - demo
+
   demo-agent:
     build: .
     command: python local/demo_agent.py demo-agent-1
@@ -77,7 +92,7 @@ services:
       api:
         condition: service_healthy
     profiles:
-      - demo
+      - demo-legacy
 
 volumes:
   pgdata:
