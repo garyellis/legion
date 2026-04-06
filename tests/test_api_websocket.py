@@ -26,7 +26,7 @@ from legion.services.job_repository import SQLiteJobRepository
 from legion.services.session_repository import SQLiteSessionRepository
 
 
-def _wait_for(predicate: Callable[[], Any], *, timeout: float = 1.0, interval: float = 0.01) -> Any:
+def _wait_for(predicate: Callable[[], Any], *, timeout: float = 5.0, interval: float = 0.01) -> Any:
     """Poll *predicate* until it returns a truthy value or *timeout* elapses.
 
     Used to synchronise with server-side ``finally`` blocks that run

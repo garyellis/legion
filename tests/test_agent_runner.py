@@ -36,10 +36,16 @@ async def _wait_for(
     step_seconds: float = 0.01,
 ) -> None:
     deadline = asyncio.get_running_loop().time() + timeout_seconds
+    last_error: Exception | None = None
     while asyncio.get_running_loop().time() < deadline:
-        if predicate():
-            return
+        try:
+            if predicate():
+                return
+        except Exception as exc:
+            last_error = exc
         await asyncio.sleep(step_seconds)
+    if last_error is not None:
+        raise AssertionError("Timed out waiting for test condition") from last_error
     raise AssertionError("Timed out waiting for test condition")
 
 
@@ -202,6 +208,10 @@ class TestAgentRunnerLifecycle:
                         assert completed_job is not None
                         assert completed_job.result == "mock-executor completed QUERY: check pods"
 
+                        await _wait_for(
+                            lambda: fleet_repo.list_agents("ag-1")
+                            and fleet_repo.list_agents("ag-1")[0].status == AgentStatus.IDLE,
+                        )
                         registered_agent = fleet_repo.list_agents("ag-1")[0]
                         assert registered_agent.status == AgentStatus.IDLE
                         assert registered_agent.current_job_id is None

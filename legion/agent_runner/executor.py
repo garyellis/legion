@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import BaseModel
@@ -19,7 +19,7 @@ from legion.plumbing.exceptions import LegionError
 
 if TYPE_CHECKING:
     from legion.agents.config import AgentConfig
-    from legion.agents.graph import ToolCallable
+    from legion.agents.graph import ChatModel
 
 logger = logging.getLogger(__name__)
 
@@ -152,11 +152,11 @@ class GraphExecutor:
     def __init__(
         self,
         *,
-        tools: list[ToolCallable],
+        tools: Sequence[Any],
         config: AgentConfig,
-        chat_model: object | None = None,
+        chat_model: ChatModel | None = None,
     ) -> None:
-        self._tools = tools
+        self._tools = list(tools)
         self._config = config
         self._chat_model = chat_model
 

@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+from collections.abc import Callable
+from typing import Any
 
 from legion.agents.config import AgentConfig
 from legion.agent_runner.client import AgentRunnerClient
 from legion.agent_runner.config import AgentRunnerConfig
-from legion.agent_runner.executor import GraphExecutor
+from legion.agent_runner.executor import AgentExecutor, GraphExecutor
 from legion.core.fleet_api.async_client import AsyncFleetAPIClient
 from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
 
@@ -36,15 +38,18 @@ async def run_agent_runner(config: AgentRunnerConfig | None = None) -> None:
     agent_config = AgentConfig()
 
     # Discover tools from entry points (agents/tools.py)
+    discover_tools_fn: Callable[[], list[Any]] | None = None
     try:
-        from legion.agents.tools import discover_tools
+        from legion.agents.tools import discover_tools as _discover_tools
     except ImportError:
-        discover_tools = None
         logger.warning("agents optional group not installed; using mock executor")
+    else:
+        discover_tools_fn = _discover_tools
 
-    tools = discover_tools() if discover_tools is not None else []
+    tools = discover_tools_fn() if discover_tools_fn is not None else []
 
     # Build executor
+    executor: AgentExecutor
     if tools:
         executor = GraphExecutor(tools=tools, config=agent_config)
     else:

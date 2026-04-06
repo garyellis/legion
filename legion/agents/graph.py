@@ -65,10 +65,12 @@ def create_chat_model(config: AgentConfig) -> ChatModel:
         if not config.anthropic_api_key.get_secret_value():
             raise AgentError("Anthropic models require AGENT_ANTHROPIC_API_KEY.")
         return cast("ChatModel", ChatAnthropic(
-            model=resolved_name,
+            model_name=resolved_name,
             api_key=config.anthropic_api_key,
-            max_tokens=config.max_completion_tokens,
+            max_tokens_to_sample=config.max_completion_tokens,
             temperature=config.temperature,
+            timeout=None,
+            stop=None,
         ))
 
     try:
@@ -92,7 +94,7 @@ def create_chat_model(config: AgentConfig) -> ChatModel:
 
 
 def build_react_graph(
-    tools: Sequence[ToolCallable],
+    tools: Sequence[ToolCallable | BaseTool],
     config: AgentConfig,
     system_prompt: str,
     *,
@@ -126,14 +128,14 @@ def build_react_graph(
         },
     )
 
-    structured_tools = _build_structured_tools(tools, StructuredTool)
+    structured_tools = _build_structured_tools(tools)
     bound_model = _bind_tools(chat_model or create_chat_model(config), structured_tools)
     tool_node = ToolNode(cast(Sequence[BaseTool | Callable[..., Any]], structured_tools))
 
     def safe_tool_node(state: AgentState) -> dict[str, Any]:
         """Execute tools with error handling, returning failures as ToolMessages."""
         try:
-            return tool_node(state)
+            return tool_node.invoke(state)
         except Exception as exc:
             # Return error as a ToolMessage so the LLM can reason about the failure
             last_message = state["messages"][-1]
@@ -256,13 +258,18 @@ def _bind_tools(chat_model: ChatModel, tools: Sequence[object]) -> Any:
 
 
 def _build_structured_tools(
-    tools: Sequence[ToolCallable],
-    structured_tool_type: type[object],
+    tools: Sequence[ToolCallable | BaseTool],
 ) -> list[BaseTool]:
+    from langchain_core.tools import BaseTool, StructuredTool
+
     structured_tools: list[BaseTool] = []
-    from_function = getattr(structured_tool_type, "from_function")
+    from_function = StructuredTool.from_function
 
     for tool_func in tools:
+        if isinstance(tool_func, BaseTool):
+            structured_tools.append(tool_func)
+            continue
+
         meta = get_tool_meta(tool_func)
         name = meta.name if meta else tool_func.__name__
         if meta and meta.description:

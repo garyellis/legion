@@ -138,7 +138,7 @@ class _FakeToolNode:
     def __init__(self, tools: list[object]) -> None:
         self._tools = {getattr(t, "name"): t for t in tools}
 
-    def __call__(self, state: dict[str, object]) -> dict[str, object]:
+    def invoke(self, state: dict[str, object]) -> dict[str, object]:
         tool_messages: list[ToolMessage] = []
         last_message = state["messages"][-1]
         for tool_call in getattr(last_message, "tool_calls", []):
@@ -152,6 +152,8 @@ class _FakeToolNode:
                 ),
             )
         return {"messages": tool_messages}
+
+    __call__ = invoke
 
 
 def _merge_state(
@@ -235,9 +237,11 @@ def test_create_chat_model_routes_to_anthropic(monkeypatch) -> None:
         ),
     )
 
-    assert captured["model"] == "claude-3-7-sonnet"
-    assert captured["max_tokens"] == 1024
+    assert captured["model_name"] == "claude-3-7-sonnet"
+    assert captured["max_tokens_to_sample"] == 1024
     assert captured["temperature"] == 0.1
+    assert captured["timeout"] is None
+    assert captured["stop"] is None
     assert captured["api_key"].get_secret_value() == "anthropic-token"
 
 

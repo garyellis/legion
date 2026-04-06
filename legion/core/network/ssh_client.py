@@ -1,13 +1,27 @@
 from dataclasses import dataclass, asdict
 from enum import Enum, auto
-from typing import List, Dict, Any, Optional
-import paramiko
 from pathlib import Path
+from typing import Any, List, Optional, Protocol
+
+import paramiko
 
 class ConnectionState(Enum):
     DISCONNECTED = auto()
     CONNECTED = auto()
     FAILED = auto()
+
+
+class SSHConfigResolver(Protocol):
+    def lookup(self, host: str) -> dict[str, Any]:
+        """Return SSH config data for a host."""
+
+
+@dataclass(frozen=True)
+class _DefaultSSHConfigResolver:
+    config: paramiko.SSHConfig
+
+    def lookup(self, host: str) -> dict[str, Any]:
+        return self.config.lookup(host)
 
 @dataclass
 class CommandResult:
@@ -34,6 +48,7 @@ class SSH(object):
         self.client: Optional[paramiko.SSHClient] = None
         self.results: List[CommandResult] = []
         self._config = self._load_config()
+        self._config_resolver: SSHConfigResolver = _DefaultSSHConfigResolver(self._config)
         self.state = ConnectionState.DISCONNECTED
 
     def is_connected(self) -> bool:
@@ -50,6 +65,14 @@ class SSH(object):
         self.host = host
         return self
 
+    def with_config_resolver(self, config_resolver: SSHConfigResolver) -> "SSH":
+        self._config_resolver = config_resolver
+        return self
+
+    @property
+    def config_resolver(self) -> SSHConfigResolver:
+        return self._config_resolver
+
     def connect(self) -> "SSH":
         if not self.host:
             raise ValueError("Host must be set before connecting. Use .to(host)")
@@ -57,7 +80,7 @@ class SSH(object):
         if self.client:
             return self
 
-        host_info = self._config.lookup(self.host)
+        host_info = self._config_resolver.lookup(self.host)
         self.client = paramiko.SSHClient()
         self.client.load_system_host_keys()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())

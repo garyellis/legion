@@ -43,6 +43,11 @@ pod_logs = "legion.core.kubernetes.pods:pod_logs"
 describe_resource = "legion.core.kubernetes.resources:describe_resource"
 get_events = "legion.core.kubernetes.resources:get_events"
 list_namespaces = "legion.core.kubernetes.cluster:list_namespaces"
+db_query = "legion.core.database.tools:db_query"
+db_tables = "legion.core.database.tools:db_tables"
+db_table_schema = "legion.core.database.tools:db_table_schema"
+db_connection_check = "legion.core.database.tools:db_connection_check"
+ssh_run_command = "legion.core.network.tools:ssh_run_command"
 
 [build-system]
 requires = ["hatchling"]
