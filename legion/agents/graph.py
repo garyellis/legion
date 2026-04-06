@@ -93,14 +93,15 @@ def create_chat_model(config: AgentConfig) -> ChatModel:
 
         if not config.anthropic_api_key.get_secret_value():
             raise AgentError("Anthropic models require AGENT_ANTHROPIC_API_KEY.")
-        return cast("ChatModel", ChatAnthropic(
-            model_name=resolved_name,
-            api_key=config.anthropic_api_key,
-            max_tokens=config.max_completion_tokens,
-            temperature=config.temperature,
-            timeout=None,
-            stop=None,
-        ))
+        anthropic_kwargs = {
+            "model_name": resolved_name,
+            "api_key": config.anthropic_api_key,
+            "max_tokens": config.max_completion_tokens,
+            "temperature": config.temperature,
+            "timeout": None,
+            "stop": None,
+        }
+        return cast("ChatModel", cast(Any, ChatAnthropic)(**anthropic_kwargs))
 
     try:
         from langchain_openai import ChatOpenAI

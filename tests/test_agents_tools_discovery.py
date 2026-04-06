@@ -94,3 +94,32 @@ def test_discover_tools_uses_description_fallback(mock_load):
 
     assert len(result) == 1
     assert result[0].description == "Run the empty_desc tool."
+
+
+@patch("legion.agents.tools.load_tool_callables")
+def test_discover_tools_skips_failed_adaptation(mock_load):
+    from langchain_core.tools import StructuredTool
+
+    mock_load.return_value = [
+        _make_discovered_tool("broken_tool", description="Broken"),
+        _make_discovered_tool("healthy_tool", description="Healthy"),
+    ]
+
+    original_from_function = StructuredTool.from_function
+
+    def fake_from_function(*, func, name, description):
+        if name == "broken_tool":
+            raise RuntimeError("adapter boom")
+        return original_from_function(
+            func=func,
+            name=name,
+            description=description,
+        )
+
+    with patch.object(StructuredTool, "from_function", side_effect=fake_from_function):
+        from legion.agents.tools import discover_tools
+
+        result = discover_tools()
+
+    assert len(result) == 1
+    assert result[0].name == "healthy_tool"

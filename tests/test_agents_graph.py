@@ -316,14 +316,57 @@ def test_build_react_graph_runs_tools_and_evaluates(monkeypatch) -> None:
 def test_build_react_graph_stops_when_budget_is_exhausted(monkeypatch) -> None:
     _install_fake_langgraph(monkeypatch)
 
+    tool_invocations: list[str] = []
+
+    @tool("budget_probe", description="Probe whether the tool node runs.", category="test")
+    def budget_probe() -> str:
+        tool_invocations.append("called")
+        return "should not be reached"
+
+    class _BudgetBoundModel:
+        def __init__(self) -> None:
+            self.calls = 0
+            self._responses = [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "budget_probe",
+                            "args": {},
+                            "id": "call-1",
+                            "type": "tool_call",
+                        },
+                    ],
+                ),
+                AIMessage(content="This follow-up should never be requested."),
+            ]
+
+        def invoke(
+            self,
+            _messages: list[object],
+            config: dict[str, object] | None = None,
+        ) -> AIMessage:
+            callbacks = list((config or {}).get("callbacks", []))
+            response = self._responses[self.calls]
+            self.calls += 1
+            usage = _FakeLLMResponse(prompt_tokens=18, completion_tokens=5)
+            for callback in callbacks:
+                callback.on_llm_end(usage)
+            return response
+
+    class _BudgetChatModel:
+        def __init__(self) -> None:
+            self.bound_model = _BudgetBoundModel()
+
+        def bind_tools(self, tools: list[object]) -> _BudgetBoundModel:  # noqa: ARG002
+            return self.bound_model
+
+    chat_model = _BudgetChatModel()
     graph = build_react_graph(
-        [],
+        [budget_probe],
         AgentConfig(),
         "Investigate budget use.",
-        chat_model=_FakeChatModel(
-            [AIMessage(content="Still working.")],
-            usages=[(18, 5)],
-        ),
+        chat_model=chat_model,
     )
 
     assert isinstance(graph, ReactGraph)
@@ -338,8 +381,12 @@ def test_build_react_graph_stops_when_budget_is_exhausted(monkeypatch) -> None:
         ),
     )
 
+    assert chat_model.bound_model.calls == 1
+    assert tool_invocations == []
     assert "Result status: partial" in result["result"]
     assert "Budget exhausted before the loop reached a natural stop." in result["result"]
+    assert result["budget_exhausted"] is True
+    assert result["tokens_used"] == 23
 
 
 def test_graph_executor_invokes_graph_with_job_payload(monkeypatch) -> None:
