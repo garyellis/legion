@@ -50,6 +50,28 @@ class _FakeAgentSessionRepo(_FakeRuntimeRepo):
     pass
 
 
+class _FakeMessageRepo(_FakeRuntimeRepo):
+    pass
+
+
+class _FakeAuditEventRepo(_FakeRuntimeRepo):
+    pass
+
+
+class _FakeMessageService:
+    def __init__(self, repo: object, **kwargs: object) -> None:
+        self.repo = repo
+
+
+class _FakeAuditService:
+    def __init__(self, repo: object) -> None:
+        self.repo = repo
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def _patch_runtime_deps(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -71,6 +93,10 @@ def _patch_runtime_deps(
     monkeypatch.setattr(api_main, "SQLiteJobRepository", _FakeJobRepo)
     monkeypatch.setattr(api_main, "SQLiteSessionRepository", _FakeSessionRepo)
     monkeypatch.setattr(api_main, "SQLiteAgentSessionRepository", _FakeAgentSessionRepo)
+    monkeypatch.setattr(api_main, "SQLiteMessageRepository", _FakeMessageRepo)
+    monkeypatch.setattr(api_main, "SQLiteAuditEventRepository", _FakeAuditEventRepo)
+    monkeypatch.setattr(api_main, "MessageService", _FakeMessageService)
+    monkeypatch.setattr(api_main, "AuditService", _FakeAuditService)
 
 
 def test_create_app_uses_validation_helper_for_persistent_database(
@@ -122,3 +148,60 @@ def test_create_app_aborts_when_validation_fails(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(RuntimeError, match="boom"):
         with TestClient(create_app()):
             pass
+
+
+# ---------------------------------------------------------------------------
+# App state contract test
+# ---------------------------------------------------------------------------
+
+# Expected attributes that must be present and non-None on app.state after
+# startup.  When a new service or repo is added to the lifespan but not listed
+# here the test will NOT catch the omission — it only catches the inverse:
+# services listed here but missing from create_app().  Keep this list in sync
+# with the lifespan wiring.
+_EXPECTED_APP_STATE_ATTRIBUTES = [
+    "fleet_repo",
+    "job_repo",
+    "session_repo",
+    "agent_session_repo",
+    "dispatch_service",
+    "session_service",
+    "filter_service",
+    "connection_manager",
+    "agent_delivery_service",
+    "db_executor",
+    "message_service",
+    "audit_service",
+]
+
+
+def test_app_state_contract_all_services_wired(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Safety net: services implemented but not wired into create_app() are
+    silently ignored by the WebSocket handler's getattr(..., None) pattern.
+    This test ensures all expected services are present after app startup.
+
+    If this test fails, a service or repository was added to the expected
+    contract but is not being set on ``app.state`` during the lifespan.  Fix
+    the lifespan in ``legion/api/main.py`` to wire the missing dependency.
+    """
+    validation_calls: list[object] = []
+    _patch_runtime_deps(
+        monkeypatch,
+        db_url="sqlite:///:memory:",
+        validation_calls=validation_calls,
+    )
+
+    app = create_app()
+    with TestClient(app):
+        missing = [
+            attr
+            for attr in _EXPECTED_APP_STATE_ATTRIBUTES
+            if getattr(app.state, attr, None) is None
+        ]
+
+    assert not missing, (
+        f"app.state is missing expected attributes after startup: {missing}. "
+        f"Ensure create_app() sets these on app.state during the lifespan."
+    )

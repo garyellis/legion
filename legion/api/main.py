@@ -33,6 +33,10 @@ from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
 from legion.services.agent_delivery_service import AgentDeliveryService
 from legion.services.agent_session_repository import AgentSessionRepository
 from legion.services.agent_session_repository import SQLiteAgentSessionRepository
+from legion.services.audit_event_repository import SQLiteAuditEventRepository
+from legion.services.audit_service import AuditService
+from legion.services.message_repository import SQLiteMessageRepository
+from legion.services.message_service import MessageService
 from legion.services.dispatch_service import DispatchService
 from legion.services.filter_service import FilterService
 from legion.services.fleet_repository import FleetRepository
@@ -110,6 +114,8 @@ def create_app(
             app.state.job_repo = SQLiteJobRepository(engine)
             app.state.session_repo = SQLiteSessionRepository(engine)
             app.state.agent_session_repo = SQLiteAgentSessionRepository(engine)
+            app.state.message_service = MessageService(SQLiteMessageRepository(engine))
+            app.state.audit_service = AuditService(SQLiteAuditEventRepository(engine))
 
         _seed_defaults(app.state.fleet_repo)
 
@@ -137,6 +143,9 @@ def create_app(
         yield
 
         # Cleanup
+        audit_service = getattr(app.state, "audit_service", None)
+        if audit_service is not None:
+            audit_service.close()
         app.state.db_executor.shutdown(wait=False)
         await app.state.connection_manager.disconnect_all()
         logger.info("API stopped")
