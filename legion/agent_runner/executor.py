@@ -79,6 +79,10 @@ class WebSocketJobEmitter:
             try:
                 await self._websocket.send(message.model_dump_json())
             except Exception as exc:
+                # Heuristic: detect connection-dead exceptions by class name to avoid
+                # importing the websockets library here. Known matches: ConnectionClosed,
+                # ConnectionClosedError, ConnectionClosedOK. This keeps the executor
+                # framework-agnostic and testable.
                 is_connection_dead = "close" in type(exc).__name__.lower() or "closed" in str(type(exc)).lower()
                 logger.warning("websocket_send_failed job=%s msg=%s", self._job_id, type(message).__name__, exc_info=True)
                 if is_connection_dead:

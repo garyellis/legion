@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -14,6 +15,8 @@ from legion.plumbing.validation import ensure_json_compatible
 
 MAX_PAYLOAD_BYTES = 65_536  # 64 KiB per field
 
+_truncation_logger = logging.getLogger(__name__)
+
 
 def _truncate_if_oversized(value: dict[str, Any], *, field_name: str) -> dict[str, Any]:
     """Replace oversized dicts with a truncation sentinel."""
@@ -21,6 +24,10 @@ def _truncate_if_oversized(value: dict[str, Any], *, field_name: str) -> dict[st
     byte_length = len(serialized.encode("utf-8"))
     if byte_length <= MAX_PAYLOAD_BYTES:
         return value
+    _truncation_logger.warning(
+        "Truncated %s payload: %d bytes exceeds %d byte limit",
+        field_name, byte_length, MAX_PAYLOAD_BYTES,
+    )
     # Byte-safe preview: take first 512 bytes, decode lossily to avoid mid-character cuts
     preview = serialized.encode("utf-8")[:512].decode("utf-8", errors="ignore")
     return {

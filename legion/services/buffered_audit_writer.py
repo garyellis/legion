@@ -65,6 +65,7 @@ class BufferedAuditWriter:
         with self._lock:
             self._closed = True
             self._flush_locked()
+        atexit.unregister(self.close)
 
     def _schedule_flush(self) -> None:
         """Schedule a timer-based flush. Must be called while holding self._lock."""

@@ -432,3 +432,69 @@ class TestAuditServiceBuffered:
         results = repo.list_by_job("job-unbuf")
         assert len(results) == 1
         assert results[0].tool_name == "kubectl"
+
+
+class TestBufferedAuditWriterRetry:
+    def test_events_rebuffered_on_first_failure(self):
+        mock_repo = MagicMock()
+        mock_repo.save_batch.side_effect = [RuntimeError("db down"), None]
+        writer = BufferedAuditWriter(
+            mock_repo, max_batch_size=3, flush_interval_seconds=60.0,
+        )
+        events = [_make_event(id=f"retry-{i}") for i in range(3)]
+        for e in events:
+            writer.append(e)
+        # Threshold flush triggered — first save_batch raises
+        assert writer.pending_count == 3  # re-buffered
+        # Second flush succeeds
+        writer.flush()
+        assert writer.pending_count == 0
+        assert writer.dropped_count == 0
+        assert mock_repo.save_batch.call_count == 2
+
+    def test_events_dropped_after_max_retries(self):
+        mock_repo = MagicMock()
+        mock_repo.save_batch.side_effect = RuntimeError("always fails")
+        writer = BufferedAuditWriter(
+            mock_repo, max_batch_size=3, flush_interval_seconds=60.0,
+            max_flush_retries=1,
+        )
+        events = [_make_event(id=f"drop-{i}") for i in range(3)]
+        for e in events:
+            writer.append(e)
+        # First flush failed — re-buffered (retry 1/1)
+        assert writer.pending_count == 3
+        # Second flush fails — max retries exceeded, events dropped
+        writer.flush()
+        assert writer.dropped_count == 3
+        assert writer.pending_count == 0
+
+    def test_retry_count_resets_after_success(self):
+        mock_repo = MagicMock()
+        # Batch 1: fail then succeed. Batch 2: fail then succeed.
+        mock_repo.save_batch.side_effect = [
+            RuntimeError("fail-1"), None,
+            RuntimeError("fail-2"), None,
+        ]
+        writer = BufferedAuditWriter(
+            mock_repo, max_batch_size=3, flush_interval_seconds=60.0,
+        )
+        # Batch 1
+        batch1 = [_make_event(id=f"reset-a-{i}") for i in range(3)]
+        for e in batch1:
+            writer.append(e)
+        # Threshold flush failed — re-buffered
+        assert writer.pending_count == 3
+        writer.flush()  # succeeds
+        assert writer.pending_count == 0
+
+        # Batch 2 — retry count should have reset
+        batch2 = [_make_event(id=f"reset-b-{i}") for i in range(3)]
+        for e in batch2:
+            writer.append(e)
+        # Threshold flush failed — re-buffered
+        assert writer.pending_count == 3
+        writer.flush()  # succeeds
+        assert writer.pending_count == 0
+        assert writer.dropped_count == 0
+        assert mock_repo.save_batch.call_count == 4

@@ -86,6 +86,7 @@ class AuditEventMessage(BaseModel):
     duration_ms: int
     sequence: int
     error: str | None = None
+    action: str = "TOOL_CALL"
 
 
 # --- Discriminated union ---

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from functools import partial
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
@@ -72,6 +73,10 @@ class ConnectionManager:
                 "system_prompt": system_prompt,
                 "max_job_tokens": 32_768,
             })
+
+    def remove(self, agent_id: str) -> None:
+        """Remove a connection synchronously. For use in finally blocks."""
+        self._connections.pop(agent_id, None)
 
     def is_connected(self, agent_id: str) -> bool:
         return agent_id in self._connections
@@ -253,15 +258,30 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
                     if audit_service is not None:
                         try:
                             from legion.domain.audit_event import AuditAction, AuditEvent
+
+                            try:
+                                audit_action = AuditAction(message.action)
+                            except ValueError:
+                                logger.warning("Unknown audit action %r, defaulting to TOOL_CALL", message.action)
+                                audit_action = AuditAction.TOOL_CALL
+
+                            output_dict: dict[str, Any] | None = None
+                            if message.tool_output is not None or message.error is not None:
+                                output_dict = {}
+                                if message.tool_output is not None:
+                                    output_dict["raw"] = message.tool_output
+                                if message.error is not None:
+                                    output_dict["error"] = message.error
+
                             audit_event = AuditEvent(
                                 job_id=message.job_id,
                                 agent_id=job.agent_id or agent_id,
                                 session_id=job.session_id,
                                 org_id=job.org_id,
-                                action=AuditAction.TOOL_CALL,
+                                action=audit_action,
                                 tool_name=message.tool_name,
                                 input={"raw": message.tool_input},
-                                output={"raw": message.tool_output},
+                                output=output_dict,
                                 duration_ms=message.duration_ms,
                             )
                             await loop.run_in_executor(db_executor, audit_service.emit, audit_event)
@@ -276,10 +296,10 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
     except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     finally:
-        connection_manager._connections.pop(agent_id, None)
-        # Run disconnect synchronously in the finally block. Using
-        # run_in_executor here is unreliable because the event loop may
-        # cancel the task during teardown (e.g. in test environments),
-        # preventing the await from ever completing.  The brief block is
-        # acceptable since this runs once per agent disconnect.
+        connection_manager.remove(agent_id)
+        # Synchronous call is intentional: dispatch_service.disconnect_agent()
+        # performs only CPU-bound SQLAlchemy operations (agent state transition
+        # + job re-queue). Using run_in_executor in a finally block is
+        # unreliable — the event loop may cancel the task during teardown,
+        # leaving the agent in a stale state.
         dispatch_service.disconnect_agent(agent_id)

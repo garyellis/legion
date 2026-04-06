@@ -79,6 +79,8 @@ def create_app(
     job_repo: JobRepository | None = None,
     session_repo: SessionRepository | None = None,
     agent_session_repo: AgentSessionRepository | None = None,
+    message_service: MessageService | None = None,
+    audit_service: AuditService | None = None,
     api_config: APIConfig | None = None,
     api_key: str = "",
 ) -> FastAPI:
@@ -117,6 +119,18 @@ def create_app(
             app.state.message_service = MessageService(SQLiteMessageRepository(engine))
             app.state.audit_service = AuditService(SQLiteAuditEventRepository(engine))
 
+        # Wire optional services when injected (DI path)
+        if not hasattr(app.state, "message_service") and message_service is not None:
+            app.state.message_service = message_service
+        if not hasattr(app.state, "audit_service") and audit_service is not None:
+            app.state.audit_service = audit_service
+
+        # Warn when services are absent after all wiring
+        if not hasattr(app.state, "message_service"):
+            logger.warning("message_service not configured — message emission disabled")
+        if not hasattr(app.state, "audit_service"):
+            logger.warning("audit_service not configured — audit event recording disabled")
+
         _seed_defaults(app.state.fleet_repo)
 
         # Services
@@ -143,9 +157,9 @@ def create_app(
         yield
 
         # Cleanup
-        audit_service = getattr(app.state, "audit_service", None)
-        if audit_service is not None:
-            audit_service.close()
+        _audit_svc = getattr(app.state, "audit_service", None)
+        if _audit_svc is not None:
+            _audit_svc.close()
         app.state.db_executor.shutdown(wait=False)
         await app.state.connection_manager.disconnect_all()
         logger.info("API stopped")
