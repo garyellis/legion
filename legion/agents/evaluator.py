@@ -36,6 +36,8 @@ def summarize_transcript(
 
 
 def _extract_final_answer(messages: Sequence[object]) -> str:
+    # Uses type().__name__ string comparison instead of isinstance() to avoid
+    # a hard dependency on langchain_core.messages in this module.
     for message in reversed(messages):
         if type(message).__name__ != "AIMessage":
             continue
@@ -48,6 +50,7 @@ def _extract_final_answer(messages: Sequence[object]) -> str:
 
 
 def _extract_tool_findings(messages: Sequence[object]) -> list[str]:
+    # See _extract_final_answer for rationale on type().__name__ pattern.
     findings: list[str] = []
     for message in messages:
         if type(message).__name__ != "ToolMessage":
@@ -60,6 +63,8 @@ def _extract_tool_findings(messages: Sequence[object]) -> list[str]:
 
 
 def _normalize_content(content: object) -> str:
+    if content is None:
+        return ""
     if isinstance(content, str):
         return content.strip()
     if isinstance(content, list):

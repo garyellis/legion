@@ -1,4 +1,18 @@
-"""Tests for the B2 LangGraph ReAct loop."""
+"""Tests for the B2 LangGraph ReAct loop.
+
+The test suite replaces LangGraph primitives with lightweight fakes
+(_FakeStateGraph, _FakeCompiledGraph, _FakeToolNode) to keep CI free of
+LLM provider dependencies.  Known divergences from real LangGraph:
+
+* ``add_messages`` reducer is not simulated — messages are appended without
+  deduplication by message ID.
+* ``_FakeCompiledGraph.ainvoke`` delegates to a synchronous ``invoke``, so
+  async scheduling differences are not exercised.
+* ``_FakeToolNode`` does not replicate ToolNode's built-in error formatting
+  or retry logic.
+
+Integration tests against real LangGraph are planned for Sprint C.
+"""
 
 from __future__ import annotations
 
@@ -238,7 +252,7 @@ def test_create_chat_model_routes_to_anthropic(monkeypatch) -> None:
     )
 
     assert captured["model_name"] == "claude-3-7-sonnet"
-    assert captured["max_tokens_to_sample"] == 1024
+    assert captured["max_tokens"] == 1024
     assert captured["temperature"] == 0.1
     assert captured["timeout"] is None
     assert captured["stop"] is None
@@ -375,3 +389,96 @@ def test_graph_executor_invokes_graph_with_job_payload(monkeypatch) -> None:
 
     assert "Namespace captured." in result.output
     assert "- echo_namespace: namespace=prod" in result.output
+
+
+def test_graph_emitter_receives_tool_events(monkeypatch) -> None:
+    _install_fake_langgraph(monkeypatch)
+
+    events: list[tuple[str, ...]] = []
+
+    class RecordingEmitter:
+        def on_tool_start(self, tool_name: str, tool_input: str) -> None:
+            events.append(("tool_start", tool_name, tool_input))
+
+        def on_tool_end(self, tool_name: str, tool_input: str, tool_output: str, duration_ms: int, error: str | None = None) -> None:
+            events.append(("tool_end", tool_name, tool_output))
+
+        def on_agent_step(self, step: str, detail: str = "") -> None:
+            events.append(("agent_step", step))
+
+    @tool("ping", description="Ping a host.", category="network")
+    def ping(host: str = "localhost") -> str:
+        return f"pong from {host}"
+
+    graph = build_react_graph(
+        [ping],
+        AgentConfig(),
+        "Test emitter.",
+        chat_model=_FakeChatModel(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"name": "ping", "args": {"host": "10.0.0.1"}, "id": "call-1", "type": "tool_call"},
+                    ],
+                ),
+                AIMessage(content="Host is reachable."),
+            ],
+            usages=[(5, 3), (4, 2)],
+        ),
+        emitter=RecordingEmitter(),
+    )
+
+    result = asyncio.run(
+        graph.compiled.ainvoke(
+            graph.make_initial_state(job_id="emitter-test", payload="ping host", max_tokens=100),
+            config={"recursion_limit": 25},
+        ),
+    )
+
+    assert "Host is reachable." in result["result"]
+    # Verify emitter received tool events
+    tool_starts = [e for e in events if e[0] == "tool_start"]
+    tool_ends = [e for e in events if e[0] == "tool_end"]
+    agent_steps = [e for e in events if e[0] == "agent_step"]
+    assert len(tool_starts) == 1
+    assert tool_starts[0][1] == "ping"
+    assert len(tool_ends) == 1
+    assert "pong from 10.0.0.1" in tool_ends[0][2]
+    assert len(agent_steps) >= 1
+
+
+def test_graph_executor_wraps_exceptions_as_agent_execution_error(monkeypatch) -> None:
+    _install_fake_langgraph(monkeypatch)
+
+    class _ExplodingChatModel:
+        def bind_tools(self, tools: list[object]) -> "_ExplodingBoundModel":
+            return _ExplodingBoundModel()
+
+    class _ExplodingBoundModel:
+        def invoke(self, _messages: list[object], config: dict[str, object] | None = None) -> object:
+            raise RuntimeError("LLM provider timeout")
+
+    from legion.agent_runner.executor import AgentExecutionError, NullJobEmitter
+
+    executor = GraphExecutor(
+        tools=[],
+        config=AgentConfig(),
+        chat_model=_ExplodingChatModel(),
+    )
+
+    from legion.agents.exceptions import LLMError
+
+    with pytest.raises(AgentExecutionError, match="job-err") as exc_info:
+        asyncio.run(
+            executor.execute(
+                JobDispatchMessage(
+                    type="job_dispatch",
+                    job_id="job-err",
+                    job_type=JobType.INVESTIGATE,
+                    payload="Will fail",
+                ),
+                NullJobEmitter(),
+            ),
+        )
+    assert isinstance(exc_info.value.__cause__, LLMError)

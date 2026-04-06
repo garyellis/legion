@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, Protocol, TypedDict, cast
@@ -25,9 +26,37 @@ ToolCallable = Callable[..., object]
 
 
 class ChatModel(Protocol):
-    """Protocol for LLM chat models that support tool binding."""
+    """Protocol for LLM chat models that support tool binding.
+
+    ``bind_tools`` returns ``Any`` intentionally — the bound model is invoked
+    via duck-typed ``.invoke()`` rather than a second protocol, keeping the
+    interface minimal for the two concrete providers (ChatOpenAI, ChatAnthropic).
+    """
 
     def bind_tools(self, tools: Any) -> Any: ...
+
+
+class GraphEmitter(Protocol):
+    """Sync callback protocol for emitting telemetry from graph nodes."""
+
+    def on_tool_start(self, tool_name: str, tool_input: str) -> None: ...
+
+    def on_tool_end(self, tool_name: str, tool_input: str, tool_output: str, duration_ms: int, error: str | None = None) -> None: ...
+
+    def on_agent_step(self, step: str, detail: str = "") -> None: ...
+
+
+class NullGraphEmitter:
+    """No-op emitter used when no emitter is provided."""
+
+    def on_tool_start(self, tool_name: str, tool_input: str) -> None:
+        pass
+
+    def on_tool_end(self, tool_name: str, tool_input: str, tool_output: str, duration_ms: int, error: str | None = None) -> None:
+        pass
+
+    def on_agent_step(self, step: str, detail: str = "") -> None:
+        pass
 
 
 def is_budget_exhausted(tokens_used: int, max_tokens: int) -> bool:
@@ -67,7 +96,7 @@ def create_chat_model(config: AgentConfig) -> ChatModel:
         return cast("ChatModel", ChatAnthropic(
             model_name=resolved_name,
             api_key=config.anthropic_api_key,
-            max_tokens_to_sample=config.max_completion_tokens,
+            max_tokens=config.max_completion_tokens,
             temperature=config.temperature,
             timeout=None,
             stop=None,
@@ -100,10 +129,13 @@ def build_react_graph(
     *,
     checkpointer: BaseCheckpointSaver | None = None,
     chat_model: ChatModel | None = None,
+    emitter: GraphEmitter | None = None,
 ) -> ReactGraph:
     """Build a compiled ReAct graph for a Legion agent workload."""
 
     logger.info("building react graph with %d tools, model=%s", len(tools), config.model_name)
+
+    _emitter = emitter or NullGraphEmitter()
 
     try:
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -134,13 +166,24 @@ def build_react_graph(
 
     def safe_tool_node(state: AgentState) -> dict[str, Any]:
         """Execute tools with error handling, returning failures as ToolMessages."""
+        last_message = state["messages"][-1]
+        tool_calls = getattr(last_message, "tool_calls", [])
+        # Build a lookup of tool_call_id -> input string for audit
+        tc_inputs = {tc["id"]: str(tc.get("args", "")) for tc in tool_calls}
+        for tc in tool_calls:
+            _emitter.on_tool_start(tc["name"], str(tc.get("args", "")))
+        t0 = time.monotonic()
         try:
-            return tool_node.invoke(state)
+            result = tool_node.invoke(state)
         except Exception as exc:
+            # duration_ms is batch wall time, not per-tool
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            error_str = str(exc)
+            for tc in tool_calls:
+                _emitter.on_tool_end(tc["name"], str(tc.get("args", "")), "", duration_ms, error=error_str)
             # Return error as a ToolMessage so the LLM can reason about the failure
-            last_message = state["messages"][-1]
             error_messages = []
-            for tc in getattr(last_message, "tool_calls", []):
+            for tc in tool_calls:
                 error_messages.append(
                     ToolMessage(
                         content=f"Tool error: {exc}",
@@ -152,11 +195,25 @@ def build_react_graph(
                 "tool_execution_error job=%s tool_calls=%d error=%s",
                 state["job_id"],
                 len(error_messages),
-                str(exc),
+                error_str,
             )
             if not error_messages:
                 raise
             return {"messages": error_messages}
+        # duration_ms is batch wall time, not per-tool
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        # Emit per-tool audit events from the returned ToolMessages
+        result_messages = result.get("messages", [])
+        for msg in result_messages:
+            if isinstance(msg, ToolMessage):
+                tool_call_id = getattr(msg, "tool_call_id", "")
+                _emitter.on_tool_end(
+                    getattr(msg, "name", "unknown"),
+                    tc_inputs.get(tool_call_id, ""),
+                    str(msg.content),
+                    duration_ms,
+                )
+        return result
 
     def agent_node(state: AgentState) -> dict[str, Any]:
         ctx = JobContext(
@@ -175,6 +232,7 @@ def build_react_graph(
                 f"Agent generation failed: {exc}",
                 model=config.model_name,
             ) from exc
+        _emitter.on_agent_step("llm_call", f"tokens_used={ctx.tokens_used}/{state['max_tokens']}")
         budget_exhausted = is_budget_exhausted(ctx.tokens_used, state["max_tokens"])
         logger.info(
             "agent_node job=%s tokens_used=%d/%d",
@@ -237,7 +295,7 @@ def build_react_graph(
                 HumanMessage(content=payload),
             ],
             "job_id": job_id,
-            "max_tokens": max_tokens or config.max_job_tokens,
+            "max_tokens": max_tokens if max_tokens is not None else config.max_job_tokens,
             "tokens_used": 0,
             "budget_exhausted": False,
             "result": "",

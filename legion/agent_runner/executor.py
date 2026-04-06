@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import BaseModel
@@ -105,6 +105,61 @@ class WebSocketJobEmitter:
         await self._send(msg)
 
 
+class _SyncEmitterBridge:
+    """Adapts async JobEmitter to sync GraphEmitter for use inside graph nodes.
+
+    Assumes LangGraph runs sync node functions on the event loop thread (not in
+    a thread pool), so ``asyncio.get_running_loop()`` is available.  If a future
+    LangGraph version moves sync nodes to threads, ``_fire`` must switch to
+    ``asyncio.run_coroutine_threadsafe(coro, loop)``.
+    """
+
+    def __init__(self, emitter: JobEmitter) -> None:
+        self._emitter = emitter
+        self._sequence = 0
+        self._pending: set[asyncio.Task[None]] = set()
+
+    def _fire(self, coro: Coroutine[object, object, None]) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(coro)
+            self._pending.add(task)
+            task.add_done_callback(self._task_done)
+        except RuntimeError:
+            logger.debug("_SyncEmitterBridge: no running event loop, skipping emission")
+
+    def _task_done(self, task: asyncio.Task[None]) -> None:
+        self._pending.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.warning("emitter task failed: %s", exc)
+
+    def on_tool_start(self, tool_name: str, tool_input: str) -> None:
+        self._sequence += 1
+        self._fire(self._emitter.emit_progress(
+            f"tool_start:{tool_name}", tool_input, sequence=self._sequence,
+        ))
+
+    def on_tool_end(self, tool_name: str, tool_input: str, tool_output: str, duration_ms: int, error: str | None = None) -> None:
+        self._sequence += 1
+        self._fire(self._emitter.emit_audit_event(
+            tool_name, tool_input, tool_output, duration_ms, sequence=self._sequence, error=error,
+        ))
+
+    def on_agent_step(self, step: str, detail: str = "") -> None:
+        self._sequence += 1
+        self._fire(self._emitter.emit_progress(
+            step, detail, sequence=self._sequence,
+        ))
+
+    async def flush(self) -> None:
+        """Await all pending emission tasks to ensure telemetry is delivered."""
+        if self._pending:
+            await asyncio.gather(*self._pending, return_exceptions=True)
+
+
 class AgentExecutor(Protocol):
     """Port for deterministic and future production executors."""
 
@@ -164,12 +219,14 @@ class GraphExecutor:
         from legion.agents.graph import build_react_graph
 
         system_prompt = job.system_prompt or DEFAULT_JOB_SYSTEM_PROMPT
+        bridge = _SyncEmitterBridge(emitter)
 
         graph = build_react_graph(
             self._tools,
             self._config,
             system_prompt,
             chat_model=self._chat_model,
+            emitter=bridge,
         )
 
         payload = (
@@ -182,8 +239,15 @@ class GraphExecutor:
             payload=payload,
             max_tokens=job.max_job_tokens,
         )
-        result = await graph.compiled.ainvoke(
-            state,
-            config={"recursion_limit": self._config.max_iterations},
-        )
+        try:
+            result = await graph.compiled.ainvoke(
+                state,
+                config={"recursion_limit": self._config.max_iterations},
+            )
+        except Exception as exc:
+            await bridge.flush()
+            raise AgentExecutionError(
+                f"Graph execution failed for job {job.job_id}: {exc}",
+            ) from exc
+        await bridge.flush()
         return ExecutionResult(output=result["result"])
