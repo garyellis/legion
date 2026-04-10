@@ -31,6 +31,7 @@ from legion.plumbing.database import create_engine
 from legion.plumbing.migrations import validate_database_schema_current
 from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
 from legion.services.agent_delivery_service import AgentDeliveryService
+from legion.services.agent_session_handler import AgentSessionHandler
 from legion.services.agent_session_repository import AgentSessionRepository
 from legion.services.agent_session_repository import SQLiteAgentSessionRepository
 from legion.services.audit_event_repository import SQLiteAuditEventRepository
@@ -149,6 +150,12 @@ def create_app(
         app.state.agent_delivery_service = AgentDeliveryService(
             app.state.dispatch_service,
             app.state.fleet_repo,
+        )
+        app.state.agent_session_handler = AgentSessionHandler(
+            app.state.dispatch_service,
+            app.state.job_repo,
+            message_service=getattr(app.state, "message_service", None),
+            audit_service=getattr(app.state, "audit_service", None),
         )
 
         app.state.db_executor = ThreadPoolExecutor(max_workers=4)
