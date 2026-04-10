@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,6 +18,7 @@ from legion.domain.protocol import (
     JobProgressMessage,
     MessageEmitMessage,
 )
+from legion.services.agent_session_handler import AgentSessionHandler
 
 
 JOB_ID = "job-001"
@@ -68,19 +69,22 @@ def _make_app_state(
     agent_delivery_service = MagicMock()
     agent_delivery_service.dispatch_pending_for_group = AsyncMock()
 
+    agent_session_handler = AgentSessionHandler(
+        dispatch_service,
+        job_repo,
+        message_service=message_service,
+        audit_service=audit_service,
+    )
+
     state = SimpleNamespace(
         fleet_repo=fleet_repo,
         job_repo=job_repo,
         dispatch_service=dispatch_service,
         connection_manager=connection_manager,
         agent_delivery_service=agent_delivery_service,
+        agent_session_handler=agent_session_handler,
         db_executor=None,  # run_in_executor(None, ...) uses default executor
     )
-
-    if message_service is not None:
-        state.message_service = message_service
-    if audit_service is not None:
-        state.audit_service = audit_service
 
     return state
 
@@ -157,7 +161,7 @@ class TestMessageEmitHandler:
         raw = msg.model_dump_json()
         ws = _make_websocket(state, [raw])
 
-        with caplog.at_level(logging.DEBUG, logger="legion.api.websocket"):
+        with caplog.at_level(logging.DEBUG, logger="legion.services.agent_session_handler"):
             asyncio.run(agent_websocket(ws, AGENT_ID))
 
         assert any("message_service not available" in record.message for record in caplog.records)
@@ -285,7 +289,7 @@ class TestAuditEventHandler:
         )
         ws = _make_websocket(state, [msg.model_dump_json()])
 
-        with caplog.at_level(logging.WARNING, logger="legion.api.websocket"):
+        with caplog.at_level(logging.WARNING, logger="legion.services.agent_session_handler"):
             asyncio.run(agent_websocket(ws, AGENT_ID))
 
         audit_service.emit.assert_called_once()
@@ -308,7 +312,7 @@ class TestAuditEventHandler:
         )
         ws = _make_websocket(state, [msg.model_dump_json()])
 
-        with caplog.at_level(logging.DEBUG, logger="legion.api.websocket"):
+        with caplog.at_level(logging.DEBUG, logger="legion.services.agent_session_handler"):
             asyncio.run(agent_websocket(ws, AGENT_ID))
 
         assert any("audit_service not available" in record.message for record in caplog.records)
@@ -357,7 +361,7 @@ class TestJobProgressHandler:
         )
         ws = _make_websocket(state, [msg.model_dump_json()])
 
-        with caplog.at_level(logging.INFO, logger="legion.api.websocket"):
+        with caplog.at_level(logging.INFO, logger="legion.services.agent_session_handler"):
             asyncio.run(agent_websocket(ws, AGENT_ID))
 
         progress_records = [r for r in caplog.records if "job_progress" in r.message]
