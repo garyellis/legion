@@ -202,9 +202,16 @@ class TestAgentWebSocket:
             "/ws/agents/agent-ws-3",
             headers={"Authorization": f"Bearer {raw_token}"},
         ):
+            saw_idle = _wait_for(
+                lambda: fleet_repo.get_agent("agent-ws-3").status == AgentStatus.IDLE,
+            )
+            assert saw_idle, "Agent did not reach IDLE before disconnect"
             pass  # connect then immediately disconnect
 
-        _wait_for(lambda: fleet_repo.get_agent("agent-ws-3").status == AgentStatus.OFFLINE)
+        saw_offline = _wait_for(
+            lambda: fleet_repo.get_agent("agent-ws-3").status == AgentStatus.OFFLINE,
+        )
+        assert saw_offline, "Agent did not reach OFFLINE after disconnect"
         reloaded = fleet_repo.get_agent("agent-ws-3")
         assert reloaded.status == AgentStatus.OFFLINE
 

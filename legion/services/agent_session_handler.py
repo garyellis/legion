@@ -1,4 +1,4 @@
-"""Agent session handler — extracts protocol/business logic from the WebSocket transport layer.
+"""Agent session handler - extracts protocol/business logic from the WebSocket transport layer.
 
 Processes parsed agent-to-server messages and returns result objects describing
 the effects the caller (transport layer) should perform. This keeps the handler
@@ -39,18 +39,31 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class RedispatchPendingForGroup:
+    """Request that the caller redispatch pending work for an agent group."""
+
+    agent_group_id: str
+
+
+type HandleEffect = RedispatchPendingForGroup
+
+
+@dataclass(frozen=True)
 class HandleResult:
     """Outcome of processing a single agent-to-server message.
 
     Attributes:
-        dispatch_pending_for_group: If set, the transport layer should trigger
-            ``agent_delivery_service.dispatch_pending_for_group`` for this group.
+        effects: Typed follow-up actions the transport layer should perform.
         ignored: True when the message was silently dropped (e.g. ownership
             violation, unknown job, DispatchError).
     """
 
-    dispatch_pending_for_group: str | None = None
+    effects: tuple[HandleEffect, ...] = ()
     ignored: bool = False
+
+    def __post_init__(self) -> None:
+        if self.ignored and self.effects:
+            raise ValueError("ignored HandleResult cannot include effects")
 
 
 _IGNORED = HandleResult(ignored=True)
@@ -158,7 +171,9 @@ class AgentSessionHandler:
                 agent_id,
             )
             return _IGNORED
-        return HandleResult(dispatch_pending_for_group=agent_group_id)
+        return HandleResult(
+            effects=(RedispatchPendingForGroup(agent_group_id),),
+        )
 
     def _handle_job_failed(
         self,
@@ -177,7 +192,9 @@ class AgentSessionHandler:
                 agent_id,
             )
             return _IGNORED
-        return HandleResult(dispatch_pending_for_group=agent_group_id)
+        return HandleResult(
+            effects=(RedispatchPendingForGroup(agent_group_id),),
+        )
 
     def _handle_job_progress(
         self,

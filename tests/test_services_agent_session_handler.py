@@ -23,6 +23,7 @@ from legion.domain.protocol import (
 from legion.services.agent_session_handler import (
     AgentSessionHandler,
     HandleResult,
+    RedispatchPendingForGroup,
 )
 from legion.services.exceptions import DispatchError
 
@@ -95,7 +96,7 @@ class TestHeartbeat:
 
         dispatch.heartbeat.assert_called_once_with(AGENT_ID)
         assert result == HandleResult()
-        assert result.dispatch_pending_for_group is None
+        assert result.effects == ()
         assert result.ignored is False
 
 
@@ -117,7 +118,7 @@ class TestJobStarted:
         assert job.status == JobStatus.RUNNING
         job_repo.save.assert_called_once_with(job)
         assert not result.ignored
-        assert result.dispatch_pending_for_group is None
+        assert result.effects == ()
 
     def test_job_started_ignored_when_job_not_found(self) -> None:
         handler = _make_handler(job=None)
@@ -153,7 +154,7 @@ class TestJobResult:
         dispatch.complete_job.assert_called_once_with(
             JOB_ID, "all pods healthy", agent_id=AGENT_ID,
         )
-        assert result.dispatch_pending_for_group == GROUP_ID
+        assert result.effects == (RedispatchPendingForGroup(GROUP_ID),)
         assert not result.ignored
 
     def test_job_result_ignored_on_dispatch_error(self) -> None:
@@ -165,7 +166,7 @@ class TestJobResult:
         result = handler.handle(msg, AGENT_ID, GROUP_ID)
 
         assert result.ignored
-        assert result.dispatch_pending_for_group is None
+        assert result.effects == ()
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +185,7 @@ class TestJobFailed:
         dispatch.fail_job.assert_called_once_with(
             JOB_ID, "timeout", agent_id=AGENT_ID,
         )
-        assert result.dispatch_pending_for_group == GROUP_ID
+        assert result.effects == (RedispatchPendingForGroup(GROUP_ID),)
         assert not result.ignored
 
     def test_job_failed_ignored_on_dispatch_error(self) -> None:
@@ -196,7 +197,7 @@ class TestJobFailed:
         result = handler.handle(msg, AGENT_ID, GROUP_ID)
 
         assert result.ignored
-        assert result.dispatch_pending_for_group is None
+        assert result.effects == ()
 
 
 # ---------------------------------------------------------------------------
@@ -659,18 +660,25 @@ class TestJobOwnershipVerification:
 class TestHandleResult:
     def test_defaults(self) -> None:
         r = HandleResult()
-        assert r.dispatch_pending_for_group is None
+        assert r.effects == ()
         assert r.ignored is False
 
-    def test_dispatch_pending(self) -> None:
-        r = HandleResult(dispatch_pending_for_group="ag-1")
-        assert r.dispatch_pending_for_group == "ag-1"
+    def test_redispatch_effect(self) -> None:
+        r = HandleResult(effects=(RedispatchPendingForGroup("ag-1"),))
+        assert r.effects == (RedispatchPendingForGroup("ag-1"),)
         assert r.ignored is False
 
     def test_ignored(self) -> None:
         r = HandleResult(ignored=True)
-        assert r.dispatch_pending_for_group is None
+        assert r.effects == ()
         assert r.ignored is True
+
+    def test_ignored_with_effects_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="ignored HandleResult cannot include effects"):
+            HandleResult(
+                effects=(RedispatchPendingForGroup("ag-1"),),
+                ignored=True,
+            )
 
     def test_frozen(self) -> None:
         r = HandleResult()

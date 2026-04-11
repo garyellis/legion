@@ -13,7 +13,12 @@ from legion.domain.agent import Agent
 from legion.domain.job import Job
 from legion.domain.prompt_config import PromptConfig
 from legion.services.agent_delivery_service import AgentDeliveryService
-from legion.services.agent_session_handler import AgentSessionHandler
+from legion.services.agent_session_handler import (
+    AgentSessionHandler,
+    HandleEffect,
+    HandleResult,
+    RedispatchPendingForGroup,
+)
 from legion.services.dispatch_service import DispatchService
 from legion.services.exceptions import (
     AgentNotFoundError,
@@ -87,6 +92,36 @@ def _parse_agent_message(raw_message: str) -> AgentToServerMessage | None:
         return None
 
 
+async def _apply_handle_result(
+    result: HandleResult,
+    agent_delivery_service: AgentDeliveryService,
+    connection_manager: ConnectionManager,
+) -> None:
+    """Translate typed service effects into websocket-adjacent follow-up work."""
+    for effect in result.effects:
+        await _apply_handle_effect(
+            effect,
+            agent_delivery_service,
+            connection_manager,
+        )
+
+
+async def _apply_handle_effect(
+    effect: HandleEffect,
+    agent_delivery_service: AgentDeliveryService,
+    connection_manager: ConnectionManager,
+) -> None:
+    """Translate a single typed effect into concrete websocket-side behavior."""
+    if isinstance(effect, RedispatchPendingForGroup):
+        await agent_delivery_service.dispatch_pending_for_group(
+            effect.agent_group_id,
+            connection_manager.send_job_to_agent,
+        )
+        return
+
+    raise TypeError(f"Unsupported HandleResult effect: {type(effect).__name__}")
+
+
 @router.websocket("/ws/agents/{agent_id}")
 async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
     fleet_repo: FleetRepository = websocket.app.state.fleet_repo
@@ -139,11 +174,7 @@ async def agent_websocket(websocket: WebSocket, agent_id: str) -> None:
                 agent.agent_group_id,
             )
 
-            if result.dispatch_pending_for_group:
-                await agent_delivery_service.dispatch_pending_for_group(
-                    result.dispatch_pending_for_group,
-                    connection_manager.send_job_to_agent,
-                )
+            await _apply_handle_result(result, agent_delivery_service, connection_manager)
 
     except (WebSocketDisconnect, asyncio.CancelledError):
         pass
