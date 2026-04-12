@@ -8,10 +8,13 @@ from legion.api.deps import (
     get_agent_delivery_service,
     get_dispatch_service,
     get_fleet_repo,
+    get_pagination,
     get_session_repo,
 )
-from legion.api.schemas import SessionCreate, SessionMessage
-from legion.domain.job import Job, JobType
+from legion.api.schemas.jobs import JobResponse
+from legion.api.schemas.pagination import PaginatedResponse, PaginationParams
+from legion.api.schemas.sessions import SessionCreate, SessionMessage, SessionResponse
+from legion.domain.job import JobType
 from legion.domain.session import Session, SessionStatus
 from legion.services.agent_delivery_service import AgentDeliveryService
 from legion.services.dispatch_service import DispatchService
@@ -26,7 +29,7 @@ def create_session(
     body: SessionCreate,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
     session_repo: SessionRepository = Depends(get_session_repo),
-) -> Session:
+) -> SessionResponse:
     if fleet_repo.get_org(body.org_id) is None:
         raise HTTPException(status_code=404, detail=f"Organization {body.org_id} not found")
     if fleet_repo.get_agent_group(body.agent_group_id) is None:
@@ -36,26 +39,29 @@ def create_session(
         agent_group_id=body.agent_group_id,
     )
     session_repo.save(session)
-    return session
+    return SessionResponse.from_domain(session)
 
 
 @router.get("/")
 def list_sessions(
     agent_group_id: str,
     session_repo: SessionRepository = Depends(get_session_repo),
-) -> list[Session]:
-    return session_repo.list_active(agent_group_id)
+    pagination: PaginationParams = Depends(get_pagination),
+) -> PaginatedResponse[SessionResponse]:
+    sessions = session_repo.list_active(agent_group_id)
+    items = [SessionResponse.from_domain(s) for s in sessions[pagination.offset:pagination.offset + pagination.limit]]
+    return PaginatedResponse(items=items, total=len(sessions), limit=pagination.limit, offset=pagination.offset)
 
 
 @router.get("/{session_id}")
 def get_session(
     session_id: str,
     session_repo: SessionRepository = Depends(get_session_repo),
-) -> Session:
+) -> SessionResponse:
     session = session_repo.get_by_id(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    return session
+    return SessionResponse.from_domain(session)
 
 
 @router.post("/{session_id}/messages", status_code=status.HTTP_201_CREATED)
@@ -66,7 +72,7 @@ async def send_message(
     session_repo: SessionRepository = Depends(get_session_repo),
     dispatch_service: DispatchService = Depends(get_dispatch_service),
     agent_delivery_service: AgentDeliveryService = Depends(get_agent_delivery_service),
-) -> Job:
+) -> JobResponse:
     session = session_repo.get_by_id(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -86,4 +92,4 @@ async def send_message(
         connection_manager.send_job_to_agent,
     )
 
-    return job
+    return JobResponse.from_domain(job)

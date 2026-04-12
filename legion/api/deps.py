@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from legion.api.schemas.pagination import PaginationParams
 from legion.services.agent_delivery_service import AgentDeliveryService
 from legion.services.dispatch_service import DispatchService
 from legion.services.agent_session_repository import AgentSessionRepository
@@ -44,3 +45,7 @@ def get_session_service(request: Request) -> SessionService:
 
 def get_filter_service(request: Request) -> FilterService:
     return request.app.state.filter_service
+
+
+def get_pagination(limit: int = 100, offset: int = 0) -> PaginationParams:
+    return PaginationParams(limit=limit, offset=offset)

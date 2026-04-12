@@ -80,7 +80,7 @@ class TestOrganizations:
         resp = client.get("/organizations/")
         assert resp.status_code == 200
         # +1 for the seeded "default" org
-        assert len(resp.json()) == 3
+        assert len(resp.json()["items"]) == 3
 
     def test_get(self, client):
         created = client.post("/organizations/", json={"name": "Acme", "slug": "acme"}).json()
@@ -126,7 +126,7 @@ class TestAgentGroups:
         })
         resp = client.get(f"/agent-groups/?org_id={org['id']}")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        assert len(resp.json()["items"]) == 1
 
     def test_get(self, client):
         org, proj = self._create_org_and_project(client)
@@ -166,7 +166,7 @@ class TestAgents:
         fleet_repo.save_agent(agent)
         resp = client.get(f"/agents/?agent_group_id={ag['id']}")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        assert len(resp.json()["items"]) == 1
 
     def test_get(self, client, fleet_repo):
         _, ag = self._create_org_and_group(client)
@@ -214,7 +214,7 @@ class TestChannelMappings:
         })
         resp = client.get(f"/channel-mappings/?org_id={org['id']}")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        assert len(resp.json()["items"]) == 1
 
     def test_get(self, client):
         org, ag = self._create_org_and_group(client)
@@ -279,7 +279,7 @@ class TestFilterRules:
         })
         resp = client.get(f"/filter-rules/?channel_mapping_id={cm['id']}")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        assert len(resp.json()["items"]) == 1
 
     def test_get(self, client):
         cm = self._create_channel_mapping(client)
@@ -358,7 +358,7 @@ class TestJobs:
         job_repo.save(job)
         resp = client.get("/jobs/?agent_group_id=ag-1")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        assert len(resp.json()["items"]) == 1
 
     def test_get(self, client, job_repo):
         job = Job(
@@ -407,7 +407,7 @@ class TestSessions:
         client.post("/sessions/", json={"org_id": org["id"], "agent_group_id": ag["id"]})
         resp = client.get(f"/sessions/?agent_group_id={ag['id']}")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        assert len(resp.json()["items"]) == 1
 
     def test_get(self, client):
         org, ag = self._create_org_and_group(client)

@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from legion.api.deps import get_dispatch_service, get_fleet_repo
-from legion.api.schemas import AgentConnectionConfig, AgentRegister, AgentRegistrationResponse
-from legion.domain.agent import Agent
+from legion.api.deps import get_dispatch_service, get_fleet_repo, get_pagination
+from legion.api.schemas.agents import (
+    AgentConnectionConfig,
+    AgentRegister,
+    AgentRegistrationResponse,
+    AgentResponse,
+)
+from legion.api.schemas.pagination import PaginatedResponse, PaginationParams
 from legion.services.dispatch_service import DispatchService
 from legion.services.fleet_repository import FleetRepository
 
@@ -21,19 +26,22 @@ def _websocket_path(agent_id: str) -> str:
 def list_agents(
     agent_group_id: str,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
-) -> list[Agent]:
-    return fleet_repo.list_agents(agent_group_id)
+    pagination: PaginationParams = Depends(get_pagination),
+) -> PaginatedResponse[AgentResponse]:
+    agents = fleet_repo.list_agents(agent_group_id)
+    items = [AgentResponse.from_domain(a) for a in agents[pagination.offset:pagination.offset + pagination.limit]]
+    return PaginatedResponse(items=items, total=len(agents), limit=pagination.limit, offset=pagination.offset)
 
 
 @router.get("/{agent_id}")
 def get_agent(
     agent_id: str,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
-) -> Agent:
+) -> AgentResponse:
     agent = fleet_repo.get_agent(agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    return agent
+    return AgentResponse.from_domain(agent)
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -49,7 +57,7 @@ def register_agent(
         body.capabilities,
     )
     return AgentRegistrationResponse(
-        agent=result.agent,
+        agent=AgentResponse.from_domain(result.agent),
         session_token=result.session_token,
         session_token_expires_at=result.session_token_expires_at,
         config=AgentConnectionConfig(

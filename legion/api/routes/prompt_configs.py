@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 
 from legion.api.deps import get_fleet_repo
-from legion.api.schemas import PromptConfigUpsert
+from legion.api.schemas.prompt_configs import PromptConfigResponse, PromptConfigUpsert
 from legion.domain.prompt_config import PromptConfig
 from legion.services.fleet_repository import FleetRepository
 
@@ -19,7 +19,7 @@ def upsert_prompt_config(
     agent_group_id: str,
     body: PromptConfigUpsert,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
-) -> PromptConfig:
+) -> PromptConfigResponse:
     if fleet_repo.get_agent_group(agent_group_id) is None:
         raise HTTPException(status_code=404, detail=f"AgentGroup {agent_group_id} not found")
     existing = fleet_repo.get_prompt_config_by_agent_group(agent_group_id)
@@ -29,7 +29,7 @@ def upsert_prompt_config(
         existing.persona = body.persona
         existing.updated_at = datetime.now(timezone.utc)
         fleet_repo.save_prompt_config(existing)
-        return existing
+        return PromptConfigResponse.from_domain(existing)
 
     config = PromptConfig(
         agent_group_id=agent_group_id,
@@ -38,15 +38,15 @@ def upsert_prompt_config(
         persona=body.persona,
     )
     fleet_repo.save_prompt_config(config)
-    return config
+    return PromptConfigResponse.from_domain(config)
 
 
 @router.get("/{agent_group_id}")
 def get_prompt_config(
     agent_group_id: str,
     fleet_repo: FleetRepository = Depends(get_fleet_repo),
-) -> PromptConfig:
+) -> PromptConfigResponse:
     config = fleet_repo.get_prompt_config_by_agent_group(agent_group_id)
     if config is None:
         raise HTTPException(status_code=404, detail="PromptConfig not found")
-    return config
+    return PromptConfigResponse.from_domain(config)
