@@ -27,22 +27,37 @@ def fleet_repo(_engine):
     return SQLiteFleetRepository(_engine)
 
 
+class InMemorySessionLinkRepository:
+    def __init__(self) -> None:
+        self._links: dict[tuple[str, str], str] = {}
+
+    def get_session_id(self, channel_id: str, thread_ts: str) -> str | None:
+        return self._links.get((channel_id, thread_ts))
+
+    def save_link(self, session_id: str, channel_id: str, thread_ts: str) -> None:
+        self._links[(channel_id, thread_ts)] = session_id
+
+
 @pytest.fixture()
-def service(session_repo, fleet_repo):
-    return SessionService(session_repo, fleet_repo)
+def session_link_repo():
+    return InMemorySessionLinkRepository()
+
+
+@pytest.fixture()
+def service(session_repo, fleet_repo, session_link_repo):
+    return SessionService(session_repo, fleet_repo, session_link_repo)
 
 
 class TestSessionService:
-    def test_get_or_create_new(self, service):
+    def test_get_or_create_new(self, service, session_link_repo):
         session, created = service.get_or_create(
             "org-1", "ag-1", "C123", "1234.5678",
         )
         assert created is True
         assert session.org_id == "org-1"
         assert session.agent_group_id == "ag-1"
-        assert session.slack_channel_id == "C123"
-        assert session.slack_thread_ts == "1234.5678"
         assert session.status == SessionStatus.ACTIVE
+        assert session_link_repo.get_session_id("C123", "1234.5678") == session.id
 
     def test_get_or_create_returns_existing(self, service):
         s1, created1 = service.get_or_create("org-1", "ag-1", "C123", "1234.5678")
@@ -51,12 +66,13 @@ class TestSessionService:
         assert created2 is False
         assert s1.id == s2.id
 
-    def test_get_or_create_new_after_close(self, service):
+    def test_get_or_create_new_after_close(self, service, session_link_repo):
         s1, _ = service.get_or_create("org-1", "ag-1", "C123", "1234.5678")
         service.close_session(s1.id)
         s2, created = service.get_or_create("org-1", "ag-1", "C123", "1234.5678")
         assert created is True
         assert s2.id != s1.id
+        assert session_link_repo.get_session_id("C123", "1234.5678") == s2.id
 
     def test_pin_agent(self, service):
         session, _ = service.get_or_create("org-1", "ag-1", "C123", "1234.5678")
@@ -86,19 +102,19 @@ class TestSessionService:
         with pytest.raises(SessionError):
             service.touch("nope")
 
-    def test_on_session_created_callback(self, session_repo, fleet_repo):
+    def test_on_session_created_callback(self, session_repo, fleet_repo, session_link_repo):
         created_sessions = []
         svc = SessionService(
-            session_repo, fleet_repo,
+            session_repo, fleet_repo, session_link_repo,
             on_session_created=lambda s: created_sessions.append(s.id),
         )
         session, _ = svc.get_or_create("org-1", "ag-1", "C123", "1234.5678")
         assert session.id in created_sessions
 
-    def test_callback_not_fired_on_existing(self, session_repo, fleet_repo):
+    def test_callback_not_fired_on_existing(self, session_repo, fleet_repo, session_link_repo):
         created_sessions = []
         svc = SessionService(
-            session_repo, fleet_repo,
+            session_repo, fleet_repo, session_link_repo,
             on_session_created=lambda s: created_sessions.append(s.id),
         )
         svc.get_or_create("org-1", "ag-1", "C123", "1234.5678")

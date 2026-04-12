@@ -11,7 +11,10 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from legion.internal.architecture._ast_utils import resolve_relative_import
+from legion.internal.architecture import dependency_check
 from legion.internal.architecture.dependency_check import (
     LAYER_ALLOWED_IMPORTS,
     PACKAGE_ROOT,
@@ -145,3 +148,83 @@ def test_layer_rules_are_complete():
         f"Add them to LAYER_ALLOWED_IMPORTS or SURFACES in "
         f"legion/internal/architecture/dependency_check.py"
     )
+
+
+def test_layer_rules_fail_closed_for_unclassified_top_level_modules(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Unknown top-level ``legion/*.py`` modules must be reported."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        (root / "main.py").write_text("", encoding="utf-8")
+        (root / "orm_registry.py").write_text("", encoding="utf-8")
+        (root / "example.py").write_text("", encoding="utf-8")
+        (root / "cli").mkdir()
+
+        monkeypatch.setattr(dependency_check, "PACKAGE_ROOT", root)
+
+        unchecked = dependency_check.find_uncovered_directories()
+
+    assert "example.py" in unchecked
+    assert "main.py" not in unchecked
+    assert "orm_registry.py" not in unchecked
+
+
+def test_dynamic_import_sites_are_allowlisted(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Only approved internal dynamic-import seams may use ``legion.*`` targets."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+
+        allowed = root / "cli" / "main.py"
+        allowed.parent.mkdir(parents=True)
+        allowed.write_text(
+            textwrap.dedent(
+                """\
+                import importlib
+
+                def load() -> None:
+                    importlib.import_module("legion.cli.commands.example")
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        blocked = root / "services" / "helper.py"
+        blocked.parent.mkdir(parents=True)
+        blocked.write_text(
+            textwrap.dedent(
+                """\
+                from importlib import import_module
+
+                def load() -> None:
+                    import_module("legion.services.internal")
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        external = root / "core" / "module.py"
+        external.parent.mkdir(parents=True)
+        external.write_text(
+            textwrap.dedent(
+                """\
+                from importlib import import_module
+
+                def load() -> None:
+                    import_module("kubernetes.client")
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(dependency_check, "PACKAGE_ROOT", root)
+
+        violations = dependency_check.find_violations()
+
+    assert len(violations) == 1
+    violation = violations[0]
+    assert violation.file.endswith("services/helper.py")
+    assert violation.target_layer == dependency_check.DYNAMIC_IMPORT_TARGET
+    assert "legion.services.internal" in violation.imported_module

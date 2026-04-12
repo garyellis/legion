@@ -1,7 +1,7 @@
-"""Slack WebClient wrapper.
+"""Slack WebClient wrapper owned by the Slack surface.
 
 Uses ``slack_sdk.WebClient`` (raw HTTP), NOT ``slack_bolt`` (surface framework).
-Any layer may import this; surface-specific Bolt wiring stays in ``legion/slack/``.
+This is the relocated Slack adapter.
 """
 
 from __future__ import annotations

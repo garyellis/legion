@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from legion.core.slack.client import SlackClient
 from legion.services.incident_service import IncidentService
+from legion.slack.client import SlackClient
 from legion.slack.incident.handlers import (
     handle_incident_command,
     handle_incident_submission,
@@ -21,8 +21,11 @@ def register_incident_handlers(
     incident_service: IncidentService,
     slack_client: SlackClient,
     slack_index: SlackIncidentIndex,
+    *,
+    session_link_repo: Any | None = None,
 ) -> None:
     """Wire /incident and /resolve commands + modal listeners onto *app*."""
+    _ = session_link_repo
 
     # Register metadata so the manifest generator can discover these commands.
     registry.register_metadata(
@@ -44,6 +47,7 @@ def register_incident_handlers(
             incident_service=incident_service,
             slack_client=slack_client,
             slack_index=slack_index,
+            session_link_repo=session_link_repo,
         )
 
     app.view("create_incident_modal")(_on_incident_submit)

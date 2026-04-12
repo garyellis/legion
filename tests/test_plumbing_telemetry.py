@@ -263,7 +263,17 @@ def test_session_service_increments_telemetry(monkeypatch: pytest.MonkeyPatch) -
     sessions_created = _RecorderMetric()
     monkeypatch.setattr("legion.services.session_service.telemetry.sessions_created_total", sessions_created)
 
-    service = SessionService(repos["session_repo"], repos["fleet_repo"])
+    class _SessionLinkRepo:
+        def __init__(self) -> None:
+            self.links: dict[tuple[str, str], str] = {}
+
+        def get_session_id(self, channel_id: str, thread_ts: str) -> str | None:
+            return self.links.get((channel_id, thread_ts))
+
+        def save_link(self, session_id: str, channel_id: str, thread_ts: str) -> None:
+            self.links[(channel_id, thread_ts)] = session_id
+
+    service = SessionService(repos["session_repo"], repos["fleet_repo"], _SessionLinkRepo())
     _session, created = service.get_or_create("org-1", "ag-1", "C123", "1234.5678")
 
     assert created is True

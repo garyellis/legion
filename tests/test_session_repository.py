@@ -18,38 +18,14 @@ class TestSessionRepositoryContract:
     def test_save_and_get(self, repo):
         s = Session(
             org_id="org-1", agent_group_id="ag-1",
-            slack_channel_id="C123", slack_thread_ts="1234.5678",
         )
         repo.save(s)
         loaded = repo.get_by_id(s.id)
         assert loaded is not None
         assert loaded.org_id == "org-1"
-        assert loaded.slack_channel_id == "C123"
 
     def test_get_nonexistent(self, repo):
         assert repo.get_by_id("nope") is None
-
-    def test_get_active_by_thread(self, repo):
-        s = Session(
-            org_id="org-1", agent_group_id="ag-1",
-            slack_channel_id="C123", slack_thread_ts="1234.5678",
-        )
-        repo.save(s)
-        found = repo.get_active_by_thread("C123", "1234.5678")
-        assert found is not None
-        assert found.id == s.id
-
-    def test_get_active_by_thread_returns_none_for_closed(self, repo):
-        s = Session(
-            org_id="org-1", agent_group_id="ag-1",
-            slack_channel_id="C123", slack_thread_ts="1234.5678",
-        )
-        s.close()
-        repo.save(s)
-        assert repo.get_active_by_thread("C123", "1234.5678") is None
-
-    def test_get_active_by_thread_no_match(self, repo):
-        assert repo.get_active_by_thread("C999", "0000.0000") is None
 
     def test_list_active(self, repo):
         s1 = Session(org_id="org-1", agent_group_id="ag-1")

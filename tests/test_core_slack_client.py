@@ -1,12 +1,12 @@
-"""Tests for legion.core.slack.client with mocked WebClient."""
+"""Tests for the relocated Slack client wrapper with mocked WebClient."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from legion.core.exceptions import ExternalAPIError
-from legion.core.slack.client import SlackClient
 from legion.core.slack.config import SlackConfig
+from legion.slack.client import SlackClient
 
 
 @pytest.fixture()
@@ -18,7 +18,7 @@ def mock_config():
 
 @pytest.fixture()
 def client(mock_config):
-    with patch("legion.core.slack.client.WebClient") as MockWC:
+    with patch("legion.slack.client.WebClient") as MockWC:
         wc = MockWC.return_value
         c = SlackClient(mock_config)
         c._client = wc

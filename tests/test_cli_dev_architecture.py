@@ -78,6 +78,68 @@ class TestArchitectureGate:
             "print_message",
         ]
 
+    def test_gate_reports_uncovered_top_level_modules(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[str] = []
+
+        monkeypatch.setattr(
+            architecture_cmd,
+            "find_uncovered_directories",
+            _recording_stub(calls, "find_uncovered_directories", {"legion/example.py"}),
+        )
+        monkeypatch.setattr(
+            architecture_cmd,
+            "find_violations",
+            _recording_stub(calls, "find_violations", []),
+        )
+        monkeypatch.setattr(
+            architecture_cmd,
+            "find_banned_import_violations",
+            _recording_stub(calls, "find_banned_import_violations", []),
+        )
+        monkeypatch.setattr(
+            architecture_cmd,
+            "find_dangerous_call_violations",
+            _recording_stub(calls, "find_dangerous_call_violations", []),
+        )
+        monkeypatch.setattr(
+            architecture_cmd,
+            "run_type_check",
+            _recording_stub(
+                calls,
+                "run_type_check",
+                TypeCheckResult(success=True, errors=[], stdout="", stderr="", return_code=0),
+            ),
+        )
+        monkeypatch.setattr(
+            architecture_cmd,
+            "find_circular_imports",
+            _recording_stub(calls, "find_circular_imports", []),
+        )
+        monkeypatch.setattr(
+            architecture_cmd,
+            "check_staged_files",
+            _recording_stub(calls, "check_staged_files", []),
+        )
+
+        rendered: list[str] = []
+        monkeypatch.setattr(
+            architecture_cmd,
+            "render_error",
+            lambda message, **_kwargs: rendered.append(message),
+        )
+        monkeypatch.setattr(
+            architecture_cmd,
+            "print_message",
+            lambda *_args, **_kwargs: rendered.append("unexpected-success"),
+        )
+
+        with pytest.raises(typer.Exit) as exc_info:
+            architecture_cmd.architecture_gate()
+
+        assert exc_info.value.exit_code == 1
+        assert len(rendered) == 1
+        assert "legion/example.py" in rendered[0]
+
     def test_gate_fails_on_typecheck_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls: list[str] = []
 

@@ -23,8 +23,6 @@ class Session(BaseModel):
     org_id: str
     agent_group_id: str
     agent_id: str | None = None
-    slack_channel_id: str | None = None
-    slack_thread_ts: str | None = None
     status: SessionStatus = SessionStatus.ACTIVE
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

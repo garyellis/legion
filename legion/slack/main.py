@@ -13,7 +13,6 @@ import os
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from slack_bolt.async_app import AsyncApp
 
-from legion.core.slack.client import SlackClient
 from legion.core.slack.config import SlackConfig
 from legion.plumbing.config.database import DatabaseConfig
 from legion.plumbing.database import create_engine
@@ -21,10 +20,16 @@ from legion.plumbing.logging import LogFormat, LogOutput, setup_logging
 from legion.plumbing.migrations import validate_database_schema_current
 from legion.plumbing.scheduler import SchedulerService
 from legion.services.incident_service import IncidentService
+from legion.services.fleet_repository import SQLiteFleetRepository
 from legion.services.repository import SQLiteIncidentRepository
+from legion.services.session_repository import SQLiteSessionRepository
+from legion.services.session_service import SessionService
+from legion.slack.chat.handlers import register_chat_handlers
 from legion.slack.incident.models import SlackIncidentIndex
 from legion.slack.incident.persistence import SQLiteSlackIncidentIndex
 from legion.slack.incident.wiring import register_incident_handlers
+from legion.slack.client import SlackClient
+from legion.slack.session.persistence import SQLiteSlackSessionLinkRepository
 from legion.slack.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -79,8 +84,16 @@ async def start_socket_mode(slack_config: SlackConfig) -> None:
     )
     validate_database_schema_current(engine)
 
-    repository = SQLiteIncidentRepository(engine)
+    incident_repo = SQLiteIncidentRepository(engine)
+    fleet_repo = SQLiteFleetRepository(engine)
+    session_repo = SQLiteSessionRepository(engine)
     slack_index: SlackIncidentIndex = SQLiteSlackIncidentIndex(engine)
+    session_link_repo = SQLiteSlackSessionLinkRepository(engine)
+    session_service = SessionService(
+        session_repo,
+        fleet_repo,
+        session_link_repo,
+    )
     scheduler = SchedulerService()
 
     # --- AI chains (optional) -----------------------------------------------
@@ -129,7 +142,7 @@ async def start_socket_mode(slack_config: SlackConfig) -> None:
                 logger.error("PIR generation failed: %s", exc)
 
     incident_service = IncidentService(
-        repository,
+        incident_repo,
         on_stale_incident=_on_stale,
         on_incident_resolved=_on_resolved,
     )
@@ -143,13 +156,18 @@ async def start_socket_mode(slack_config: SlackConfig) -> None:
 
     # --- Register handlers --------------------------------------------------
     load_commands(app)
-    register_incident_handlers(app, incident_service, slack_client, slack_index)
-
-    @app.event("app_mention")
-    async def handle_mentions(event, say):  # type: ignore[no-untyped-def]
-        await say(
-            f"Hello <@{event['user']}>! Try `/incident` to declare an incident."
-        )
+    register_incident_handlers(
+        app,
+        incident_service,
+        slack_client,
+        slack_index,
+        session_link_repo=session_link_repo,
+    )
+    register_chat_handlers(
+        app,
+        fleet_repo=fleet_repo,
+        session_service=session_service,
+    )
 
     # --- Start --------------------------------------------------------------
     scheduler.start()

@@ -8,10 +8,11 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from legion.domain.session import Session
+from legion.domain.session import Session, SessionStatus
 from legion.plumbing import telemetry
 from legion.services.exceptions import SessionError
 from legion.services.fleet_repository import FleetRepository
+from legion.services.session_link_repository import SessionLinkRepository
 from legion.services.session_repository import SessionRepository
 
 logger = logging.getLogger(__name__)
@@ -26,11 +27,13 @@ class SessionService:
         self,
         session_repo: SessionRepository,
         fleet_repo: FleetRepository,
+        session_link_repo: SessionLinkRepository | None = None,
         *,
         on_session_created: OnSessionCreated | None = None,
     ) -> None:
         self.session_repo = session_repo
         self.fleet_repo = fleet_repo
+        self.session_link_repo = session_link_repo
         self._on_created = on_session_created
 
     def get_or_create(
@@ -45,19 +48,23 @@ class SessionService:
         If an active session exists for this thread, return it.
         Otherwise create a new one.
         """
-        existing = self.session_repo.get_active_by_thread(channel_id, thread_ts)
-        if existing is not None:
-            return existing, False
+        if self.session_link_repo is None:
+            raise SessionError("SessionLinkRepository is required for get_or_create")
+
+        existing_session_id = self.session_link_repo.get_session_id(channel_id, thread_ts)
+        if existing_session_id is not None:
+            existing = self.session_repo.get_by_id(existing_session_id)
+            if existing is not None and existing.status == SessionStatus.ACTIVE:
+                return existing, False
 
         session = Session(
             org_id=org_id,
             agent_group_id=agent_group_id,
-            slack_channel_id=channel_id,
-            slack_thread_ts=thread_ts,
         )
         self.session_repo.save(session)
+        self.session_link_repo.save_link(session.id, channel_id, thread_ts)
         telemetry.sessions_created_total.labels(org_id, agent_group_id).inc()
-        logger.info("Session created: %s (channel=%s)", session.id, channel_id)
+        logger.info("Session created: %s", session.id)
 
         if self._on_created:
             self._on_created(session)

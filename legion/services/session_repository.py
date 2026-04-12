@@ -31,11 +31,6 @@ class SessionRepository(ABC):
     def get_by_id(self, session_id: str) -> Optional[Session]: ...
 
     @abstractmethod
-    def get_active_by_thread(
-        self, channel_id: str, thread_ts: str
-    ) -> Optional[Session]: ...
-
-    @abstractmethod
     def list_active(self, agent_group_id: str | None = None) -> list[Session]: ...
 
 
@@ -50,8 +45,6 @@ class SessionRow(Base):
     org_id = Column(String, nullable=False)
     agent_group_id = Column(String, nullable=False)
     agent_id = Column(String, nullable=True)
-    slack_channel_id = Column(String, nullable=True)
-    slack_thread_ts = Column(String, nullable=True)
     status = Column(String, nullable=False, default=SessionStatus.ACTIVE.value)
     created_at = Column(DateTime(timezone=True), nullable=False)
     last_activity = Column(DateTime(timezone=True), nullable=False)
@@ -75,8 +68,6 @@ class SQLiteSessionRepository(SessionRepository):
             row.org_id = session.org_id
             row.agent_group_id = session.agent_group_id
             row.agent_id = session.agent_id
-            row.slack_channel_id = session.slack_channel_id
-            row.slack_thread_ts = session.slack_thread_ts
             row.status = session.status.value
             row.created_at = session.created_at
             row.last_activity = session.last_activity
@@ -93,23 +84,6 @@ class SQLiteSessionRepository(SessionRepository):
     def get_by_id(self, session_id: str) -> Optional[Session]:
         with self._session_factory() as db:
             row = db.get(SessionRow, session_id)
-            if row is None:
-                return None
-            return self._to_domain(row)
-
-    def get_active_by_thread(
-        self, channel_id: str, thread_ts: str
-    ) -> Optional[Session]:
-        with self._session_factory() as db:
-            row = (
-                db.query(SessionRow)
-                .filter(
-                    SessionRow.slack_channel_id == channel_id,
-                    SessionRow.slack_thread_ts == thread_ts,
-                    SessionRow.status == SessionStatus.ACTIVE.value,
-                )
-                .first()
-            )
             if row is None:
                 return None
             return self._to_domain(row)
@@ -137,8 +111,6 @@ class SQLiteSessionRepository(SessionRepository):
             org_id=row.org_id,
             agent_group_id=row.agent_group_id,
             agent_id=row.agent_id,
-            slack_channel_id=row.slack_channel_id,
-            slack_thread_ts=row.slack_thread_ts,
             status=SessionStatus(row.status),
             created_at=ensure(row.created_at),
             last_activity=ensure(row.last_activity),

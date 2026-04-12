@@ -64,8 +64,8 @@ class TestSession:
         assert s.id
         assert s.status == SessionStatus.ACTIVE
         assert s.agent_id is None
-        assert s.slack_channel_id is None
-        assert s.slack_thread_ts is None
+        assert "slack_channel_id" not in Session.model_fields
+        assert "slack_thread_ts" not in Session.model_fields
 
     def test_pin_agent(self):
         s = Session(org_id="org-1", agent_group_id="ag-1")

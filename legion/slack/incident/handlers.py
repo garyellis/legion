@@ -8,11 +8,14 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from legion.core.slack.client import SlackClient
 from legion.domain.incident import IncidentSeverity
 from legion.services.incident_service import IncidentService
+from legion.services.fleet_repository import SQLiteFleetRepository
+from legion.slack.client import SlackClient
 from legion.slack.incident.models import SlackIncidentIndex, SlackIncidentState
 from legion.slack.views.incident import IncidentView
+from legion.services.session_repository import SQLiteSessionRepository
+from legion.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +23,111 @@ logger = logging.getLogger(__name__)
 async def handle_incident_command(ack: Any, body: dict, client: Any) -> None:
     """Open the 'Declare Incident' modal."""
     await ack()
+    view = IncidentView.render_incident_modal()
+    view["private_metadata"] = json.dumps(
+        {"origin_channel_id": body["channel_id"]}
+    )
     await client.views_open(
         trigger_id=body["trigger_id"],
-        view=IncidentView.render_incident_modal(),
+        view=view,
+    )
+
+
+def _get_engine_from_repo(repo: Any) -> Any | None:
+    """Extract the SQLAlchemy engine from a repository if it is available."""
+    engine = getattr(repo, "_engine", None)
+    if engine is not None:
+        return engine
+
+    session_factory = getattr(repo, "_session_factory", None)
+    if session_factory is None:
+        return None
+
+    factory_kwargs = getattr(session_factory, "kw", None)
+    if not isinstance(factory_kwargs, dict):
+        return None
+    return factory_kwargs.get("bind")
+
+
+def _get_origin_channel_id(view: dict[str, Any]) -> str | None:
+    """Read the originating Slack channel from modal private metadata."""
+    private_metadata = view.get("private_metadata")
+    if not private_metadata:
+        return None
+
+    try:
+        metadata = json.loads(private_metadata)
+    except json.JSONDecodeError:
+        logger.warning("Incident modal private metadata was invalid JSON")
+        return None
+
+    origin_channel_id = metadata.get("origin_channel_id")
+    if not isinstance(origin_channel_id, str) or not origin_channel_id:
+        logger.warning("Incident modal metadata missing origin_channel_id")
+        return None
+    return origin_channel_id
+
+
+def _bind_incident_session(
+    *,
+    incident_id: str,
+    incident_channel_id: str,
+    dashboard_ts: str,
+    view: dict[str, Any],
+    incident_service: IncidentService,
+    slack_link_repo: Any | None,
+) -> None:
+    """Best-effort session binding for incident channels."""
+    origin_channel_id = _get_origin_channel_id(view)
+    if origin_channel_id is None:
+        logger.info(
+            "Skipping session binding for incident %s: missing origin channel",
+            incident_id,
+        )
+        return
+
+    if slack_link_repo is None:
+        logger.warning(
+            "Skipping session binding for incident %s: missing Slack session-link repo",
+            incident_id,
+        )
+        return
+
+    engine = _get_engine_from_repo(slack_link_repo) or _get_engine_from_repo(
+        incident_service.repository
+    )
+    if engine is None:
+        logger.warning(
+            "Skipping session binding for incident %s: no shared DB engine available",
+            incident_id,
+        )
+        return
+
+    fleet_repo = SQLiteFleetRepository(engine)
+    session_repo = SQLiteSessionRepository(engine)
+    session_service = SessionService(session_repo, fleet_repo, slack_link_repo)
+
+    mapping = fleet_repo.get_channel_mapping_by_channel(origin_channel_id)
+    if mapping is None:
+        logger.info(
+            "Skipping session binding for incident %s: no mapping for origin channel %s",
+            incident_id,
+            origin_channel_id,
+        )
+        return
+
+    session, created = session_service.get_or_create(
+        mapping.org_id,
+        mapping.agent_group_id,
+        incident_channel_id,
+        dashboard_ts,
+    )
+    logger.info(
+        "Incident %s bound to session %s (%s) via origin channel %s%s",
+        incident_id,
+        session.id,
+        "created" if created else "reused",
+        origin_channel_id,
     )
 
 
@@ -35,6 +140,7 @@ async def handle_incident_submission(
     incident_service: IncidentService,
     slack_client: SlackClient,
     slack_index: SlackIncidentIndex,
+    session_link_repo: Any | None = None,
 ) -> None:
     """Process the 'Declare Incident' modal submission."""
     await ack()
@@ -78,6 +184,15 @@ async def handle_incident_submission(
         # Track Slack state
         state = SlackIncidentState(incident.id, channel_id, dashboard_ts)
         slack_index.register(state)
+
+        _bind_incident_session(
+            incident_id=incident.id,
+            incident_channel_id=channel_id,
+            dashboard_ts=dashboard_ts,
+            view=view,
+            incident_service=incident_service,
+            slack_link_repo=session_link_repo,
+        )
 
         await client.chat_postMessage(
             channel=user_id,

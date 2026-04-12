@@ -44,6 +44,14 @@ class _FakeRuntimeIndex:
         self.engine = engine
 
 
+class _FakeSessionLinkRepo:
+    created_engines: list[object] = []
+
+    def __init__(self, engine: object) -> None:
+        self.engine = engine
+        self.__class__.created_engines.append(engine)
+
+
 def _patch_runtime_deps(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -63,6 +71,7 @@ def _patch_runtime_deps(
     )
     monkeypatch.setattr(slack_main, "SQLiteIncidentRepository", _FakeRuntimeRepo)
     monkeypatch.setattr(slack_main, "SQLiteSlackIncidentIndex", _FakeRuntimeIndex)
+    monkeypatch.setattr(slack_main, "SQLiteSlackSessionLinkRepository", _FakeSessionLinkRepo)
     monkeypatch.setattr(slack_main, "SchedulerService", _FakeScheduler)
     monkeypatch.setattr(slack_main, "AsyncSocketModeHandler", _FakeSocketModeHandler)
     monkeypatch.setattr(slack_main, "load_commands", lambda app: None)
@@ -73,6 +82,7 @@ def test_start_socket_mode_uses_validation_helper_for_persistent_database(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     validation_calls: list[object] = []
+    _FakeSessionLinkRepo.created_engines.clear()
     _patch_runtime_deps(
         monkeypatch,
         db_url="sqlite:///legion.db",
@@ -89,12 +99,14 @@ def test_start_socket_mode_uses_validation_helper_for_persistent_database(
     )
 
     assert len(validation_calls) == 1
+    assert _FakeSessionLinkRepo.created_engines == validation_calls
 
 
 def test_start_socket_mode_uses_validation_helper_for_in_memory_database(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     validation_calls: list[object] = []
+    _FakeSessionLinkRepo.created_engines.clear()
     _patch_runtime_deps(
         monkeypatch,
         db_url="sqlite:///:memory:",
@@ -111,11 +123,13 @@ def test_start_socket_mode_uses_validation_helper_for_in_memory_database(
     )
 
     assert len(validation_calls) == 1
+    assert _FakeSessionLinkRepo.created_engines == validation_calls
 
 
 def test_start_socket_mode_aborts_when_validation_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _FakeSessionLinkRepo.created_engines.clear()
     monkeypatch.setattr(
         slack_main,
         "DatabaseConfig",
@@ -136,3 +150,36 @@ def test_start_socket_mode_aborts_when_validation_fails(
                 ),
             ),
         )
+
+
+def test_start_socket_mode_registers_chat_routing_with_session_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    validation_calls: list[object] = []
+    chat_registration_calls: list[dict[str, object]] = []
+    _FakeSessionLinkRepo.created_engines.clear()
+    _patch_runtime_deps(
+        monkeypatch,
+        db_url="sqlite:///legion.db",
+        validation_calls=validation_calls,
+    )
+    monkeypatch.setattr(
+        slack_main,
+        "register_chat_handlers",
+        lambda *args, **kwargs: chat_registration_calls.append(kwargs),
+    )
+
+    asyncio.run(
+        slack_main.start_socket_mode(
+            SlackConfig(
+                bot_token=SecretStr("xoxb-test"),
+                app_token=SecretStr("xapp-test"),
+            ),
+        ),
+    )
+
+    assert len(chat_registration_calls) == 1
+    registration = chat_registration_calls[0]
+    session_service = registration["session_service"]
+    assert session_service.session_link_repo is not None
+    assert session_service.session_link_repo.__class__ is _FakeSessionLinkRepo
