@@ -62,11 +62,19 @@ Parses input or formats output for a specific medium?         → surface layer
 AI runtime infrastructure?                                    → agents/
 ```
 
-## Feature Intake Default
+## Issue Intake Default
 
-For non-trivial feature requests, create a local feature handoff brief with `legion-dev feature create "<title>"` before implementation or delegation.
+For non-trivial feature requests, create or use a GitHub issue before implementation or delegation.
 
-Use the brief when any of these are true:
+Use:
+- `legion-dev issue create "<title>" --print-template > /tmp/issue.md`
+- `legion-dev issue create "<title>" --body-file /tmp/issue.md`
+- `legion-dev issue validate "<ref>"`
+- `legion-dev issue handoff "<ref>"`
+
+Issue bodies must be short, factual, testable, and repo-grounded. Use comments for discussion; update the body when the work contract changes. Close completed issues with `legion-dev issue close "<ref>" --verified "<commands and results>"`.
+
+Use an issue when any of these are true:
 
 - More than one subsystem, surface, or layer is likely to change.
 - The request is underspecified and behavior would otherwise be inferred.
@@ -75,14 +83,14 @@ Use the brief when any of these are true:
 - Acceptance criteria or verification steps are not already explicit.
 - The change affects user-visible workflows, persistence, config, or public interfaces.
 
-Skip the brief only for clearly small, local changes. If skipping, warn the operator that bypassing the feature gate increases the risk of ambiguity, architectural drift, and weaker handoff quality, then proceed if they still want to skip it.
+Skip the issue only for clearly small, local changes. If skipping, warn the operator that bypassing the issue gate increases the risk of ambiguity, architectural drift, and weaker handoff quality, then proceed if they still want to skip it.
 
-Treat the feature brief as a handoff contract:
+Treat the GitHub issue as a handoff contract:
 
 - Fill in repo-grounded context, constraints, target files, risks, verification commands, and done condition.
 - Use it as the source of truth for sub-agent delegation or session handoff.
-- Use `legion-dev feature show "<title>"` to inspect it and `legion-dev feature handoff "<title>"` to produce a copyable execution prompt.
-- Generated files live in `docs/features/` and are intentionally gitignored except for `.gitkeep`.
+- Use `legion-dev issue show "<ref>"` to inspect it, `legion-dev issue update "<ref>" --body-file <path>` to refine the canonical body, and `legion-dev issue handoff "<ref>"` to produce a copyable execution prompt.
+- `legion-dev issue handoff` requires a validated body unless `--allow-draft` is passed deliberately.
 
 ## Code Conventions
 

@@ -110,8 +110,8 @@ Execution order:
   - Alembic setup and startup migration wiring
   - Observability/plugin closeout work to match the planning docs
 - **Handoff mechanism**
-  - Use `uv run legion-dev feature show "<title>"` to inspect a local brief.
-  - Use `uv run legion-dev feature handoff "<title>"` to emit the deterministic prompt for a worktree, sub-agent, or external coding agent.
+  - Use `uv run legion-dev issue show "<number-or-title>"` to inspect a GitHub issue.
+  - Use `uv run legion-dev issue handoff "<number-or-title>"` to emit the deterministic prompt for a worktree, sub-agent, or external coding agent.
 
 ### What to Watch For
 
@@ -399,6 +399,7 @@ These build on the core sprints. Each requires design resolution before scheduli
 |:------|:------------|:-----------|
 | **Security hardening** | API key auth, RBAC, secrets management, query policies | Sprint B (agents running) |
 | **Deployment** | Docker Compose, single k8s, multi-cluster k8s | Sprint D (full feature set) |
+| **Token cost observability and quota guardrails** | Operator-facing token/cost views by agent group and agent, plus the deferred path for soft/hard spend limits and runaway-agent intervention workflows | Sprint D observability foundations |
 
 ### Long-Term
 

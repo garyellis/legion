@@ -9,7 +9,7 @@ What works today and what's on the roadmap.
 | Component | Status | Description |
 |:----------|:-------|:------------|
 | CLI (`legion-cli`) | Working | Typer-based CLI with architecture enforcement, lab operations |
-| Developer CLI (`legion-dev`) | Working | Internal development harness for architecture gates, ADRs, review, scaffolding, and feature handoff briefs |
+| Developer CLI (`legion-dev`) | Working | Internal development harness for architecture gates, ADRs, review, scaffolding, and GitHub issue handoffs |
 | Slack bot (`legion-slack`) | Working | Slack Bolt integration with incident management, slash commands |
 | REST API (`legion-api`) | Working | FastAPI surface with CRUD routes, WebSocket scaffolding |
 | OpenStack adapter | Working | VM lifecycle, compute management, batch orchestration |
@@ -46,7 +46,7 @@ slack/       Slack Bolt bot     → legion-slack
 api/         FastAPI REST API   → legion-api
 ```
 
-`cli_dev/` is the internal development harness surface. It exists to keep architecture intent, review expectations, ADR workflows, and feature handoff discipline executable instead of tribal knowledge.
+`cli_dev/` is the internal development harness surface. It exists to keep architecture intent, review expectations, ADR workflows, and issue handoff discipline executable instead of tribal knowledge.
 
 ## Roadmap
 
@@ -78,7 +78,8 @@ uv run pytest                                  # run all tests
 uv run legion-dev architecture gate            # dependency direction + banned imports + typecheck + circular + dangerous calls + secrets
 uv run legion-dev review                       # repo-aware engineering review prompt
 uv run legion-dev adr create "<title>"         # create the next ADR from the template
-uv run legion-dev feature create "<title>"     # create a local feature handoff brief
+uv run legion-dev issue create "<title>" --print-template > /tmp/issue.md
+uv run legion-dev issue create "<title>" --body-file /tmp/issue.md
 uv run legion-dev architecture typecheck       # mypy type checking
 uv run legion-dev architecture security        # bandit SAST scan
 uv run legion-dev architecture audit           # dependency vulnerability scan
@@ -87,8 +88,10 @@ uv run legion-dev architecture audit           # dependency vulnerability scan
 Common `legion-dev` workflows:
 
 ```bash
-uv run legion-dev feature show "<title>"       # inspect the current handoff brief
-uv run legion-dev feature handoff "<title>"    # emit a deterministic handoff prompt
+uv run legion-dev issue show "<number-or-title>"       # inspect a GitHub issue
+uv run legion-dev issue validate "<number-or-title>"   # check readiness for handoff
+uv run legion-dev issue handoff "<number-or-title>"    # emit a deterministic handoff prompt
+uv run legion-dev issue close "<number-or-title>" --verified "<commands and results>"
 uv run legion-dev review                       # load active repo instructions for review
 ```
 

@@ -72,7 +72,7 @@ Does it parse input or format output for a specific medium?
 
 Not every command needs a service. If a CLI command wraps one core function, call `core/` directly from the surface.
 
-`cli_dev/` is the developer harness surface. Put development-only commands there: architecture gates, ADR helpers, review tooling, scaffolding, and feature handoff workflows.
+`cli_dev/` is the developer harness surface. Put development-only commands there: architecture gates, ADR helpers, review tooling, scaffolding, and GitHub issue handoff workflows.
 
 ---
 
@@ -112,15 +112,19 @@ incident_service = IncidentService(
 
 Every new dependency requires a decision record in `docs/decisionlog/`. Run `legion-dev adr create "<title>" --dependency` to generate the next ADR with the correct ID and template. See `docs/decisionlog/0000-template.md` for the full format reference.
 
-### Non-trivial features require a handoff brief
+### Non-trivial features require an issue handoff
 
-For non-trivial feature requests, create a local feature handoff brief before implementation or delegation:
+For non-trivial feature requests, create or use a GitHub issue before implementation or delegation:
 
 ```bash
-uv run legion-dev feature create "<title>"
+uv run legion-dev issue create "<title>" --print-template > /tmp/issue.md
+# Human and agent refine /tmp/issue.md until it is specific, short, and testable.
+uv run legion-dev issue create "<title>" --body-file /tmp/issue.md
+uv run legion-dev issue validate "<number-or-title>"
+uv run legion-dev issue handoff "<number-or-title>"
 ```
 
-Use `uv run legion-dev feature show "<title>"` to inspect the brief and `uv run legion-dev feature handoff "<title>"` to emit a deterministic handoff prompt for a new session or delegated agent.
+Use `uv run legion-dev issue show "<number-or-title>"` to inspect the issue, `uv run legion-dev issue update "<number-or-title>" --body-file <path>` to refine the canonical body, and `uv run legion-dev issue handoff "<number-or-title>"` to emit a deterministic handoff prompt for a new session or delegated agent. Use `--body "<context>"` only for small scripted issues; non-trivial work should use the structured body.
 
 Use the brief when any of these are true:
 
@@ -131,9 +135,15 @@ Use the brief when any of these are true:
 - Acceptance criteria or verification steps are not already explicit
 - The change affects user-visible workflows, persistence, config, or public interfaces
 
-Skip the brief only for clearly small, local changes. If skipping, warn the operator that bypassing the feature gate increases the risk of ambiguity, architectural drift, and weaker handoff quality, then proceed only if they still want to skip it.
+Skip the issue only for clearly small, local changes. If skipping, warn the operator that bypassing the issue gate increases the risk of ambiguity, architectural drift, and weaker handoff quality, then proceed only if they still want to skip it.
 
-Generated briefs live in `docs/features/`. The directory is tracked, but generated markdown files are gitignored because they are local working artifacts rather than long-lived repo docs.
+Issue handoff state lives in GitHub Issues. The legacy `docs/features/` markdown files are migration inputs only.
+
+Close completed issues with verification evidence:
+
+```bash
+uv run legion-dev issue close "<number-or-title>" --verified "uv run pytest ... passed; uv run legion-dev architecture gate passed"
+```
 
 ---
 
@@ -199,14 +209,17 @@ wt remove                                  # abandon a worktree
 
 ```
 1. wt switch -c feature/<name>                  # isolate
-2. uv run legion-dev feature create "<title>"    # handoff brief for non-trivial work
-3. uv run legion-dev feature handoff "<title>"    # copyable handoff for a new session or sub-agent
-4. implement changes                             # code
-5. uv run pytest                                 # test
-6. uv run legion-dev architecture gate           # gate
-7. /review                                       # subagent code review (see below)
-8. git add <files> && git commit                 # commit
-9. wt merge main                                 # land on main
+2. uv run legion-dev issue create "<title>" --print-template > /tmp/issue.md
+3. uv run legion-dev issue create "<title>" --body-file /tmp/issue.md
+4. uv run legion-dev issue validate "<number-or-title>"
+5. uv run legion-dev issue handoff "<number-or-title>"          # copyable handoff for a new session or sub-agent
+6. implement changes                             # code
+7. uv run pytest                                 # test
+8. uv run legion-dev architecture gate           # gate
+9. /review                                       # subagent code review (see below)
+10. uv run legion-dev issue close "<number-or-title>" --verified "<commands and results>"
+11. git add <files> && git commit                # commit
+12. wt merge main                                # land on main
 ```
 
 See `.claude/rules/worktrees.md` for AI agent coordination rules (which files are safe to parallelize, which require coordination).
